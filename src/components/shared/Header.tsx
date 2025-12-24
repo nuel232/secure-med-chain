@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Shield, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useBlockchain } from '@/contexts/BlockchainContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -36,6 +37,8 @@ export const Header = () => {
         </div>
 
         <div className="flex items-center gap-4">
+          <ThemeToggle />
+          
           {role && (
             <div className="hidden sm:flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5">
               <User className="h-4 w-4 text-secondary-foreground" />

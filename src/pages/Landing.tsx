@@ -2,9 +2,11 @@ import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { Shield, Wallet, ChevronRight, Database, Lock, FileCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useBlockchain } from '@/contexts/BlockchainContext';
 import { PageTransition, StaggerContainer, StaggerItem } from '@/components/layout/PageTransition';
 import { useNavigate } from 'react-router-dom';
+import { Waves } from '@/components/ui/waves-background';
 
 const Landing = () => {
   const { connectWallet, isLoading, isConnected, setRole, error } = useBlockchain();
@@ -40,14 +42,37 @@ const Landing = () => {
   ];
 
   return (
-    <PageTransition className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-primary/10 rounded-full blur-3xl opacity-30" />
+    <PageTransition className="relative min-h-screen">
+      {/* Fixed wave background - always visible */}
+      <div className="fixed inset-0 z-0">
+        <Waves
+          backgroundColor="transparent"
+          waveSpeedX={0.0125}
+          waveSpeedY={0.005}
+          waveAmpX={32}
+          waveAmpY={16}
+          friction={0.925}
+          tension={0.005}
+          maxCursorMove={100}
+          xGap={10}
+          yGap={32}
+        />
+      </div>
+      
+      {/* All content with relative positioning and higher z-index */}
+      <div className="relative z-10">
+        {/* Theme Toggle - Fixed position in top right */}
+        <div className="fixed top-4 right-4 z-50">
+          <ThemeToggle />
         </div>
+
+        {/* Hero Section */}
+        <div className="relative overflow-hidden bg-transparent">
+          {/* Subtle gradient overlay */}
+          <div className="absolute inset-0 -z-10">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-primary/10 rounded-full blur-3xl opacity-30" />
+          </div>
 
         <div className="container mx-auto px-4 py-20 lg:py-32">
           <div className="max-w-4xl mx-auto text-center">
@@ -147,61 +172,62 @@ const Landing = () => {
             </StaggerContainer>
           </div>
         </div>
-      </div>
+        </div>
 
-      {/* Features Section */}
-      <section className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-3xl font-bold text-foreground mb-4">
-              Why Blockchain for Drug Inventory?
-            </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Traditional systems allow record manipulation. Blockchain ensures 
-              every transaction is permanent and verifiable.
-            </p>
-          </motion.div>
+        {/* Features Section */}
+        <section className="py-20 bg-transparent">
+          <div className="container mx-auto px-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="text-center mb-12"
+            >
+              <h2 className="text-3xl font-bold text-foreground mb-4">
+                Why Blockchain for Drug Inventory?
+              </h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto">
+                Traditional systems allow record manipulation. Blockchain ensures 
+                every transaction is permanent and verifiable.
+              </p>
+            </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {features.map((feature, index) => (
-              <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1, duration: 0.4 }}
-                whileHover={{ y: -4 }}
-                className="glass-card rounded-2xl p-6 text-center"
-              >
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-primary/10 mb-4">
-                  <feature.icon className="w-7 h-7 text-primary" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">
-                  {feature.title}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {feature.description}
-                </p>
-              </motion.div>
-            ))}
+            <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+              {features.map((feature, index) => (
+                <motion.div
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.1, duration: 0.4 }}
+                  whileHover={{ y: -4 }}
+                  className="glass-card rounded-2xl p-6 text-center bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm"
+                >
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-primary/10 mb-4">
+                    <feature.icon className="w-7 h-7 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    {feature.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </motion.div>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Footer */}
-      <footer className="py-8 border-t border-border">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            Final Year Academic Project — Blockchain-Based Drug Inventory Management
-          </p>
-        </div>
-      </footer>
+        {/* Footer */}
+        <footer className="py-8 border-t border-border/50 bg-transparent">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              Final Year Academic Project — Blockchain-Based Drug Inventory Management
+            </p>
+          </div>
+        </footer>
+      </div>
     </PageTransition>
   );
 };
