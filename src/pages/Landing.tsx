@@ -1,25 +1,39 @@
 import { motion } from 'framer-motion';
-import { useState } from 'react';
-import { Shield, Wallet, ChevronRight, Database, Lock, FileCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Shield, Wallet, ChevronRight, Database, Lock, FileCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBlockchain } from '@/hooks/useBlockchain';
 import { PageTransition, StaggerContainer, StaggerItem } from '@/components/layout/PageTransition';
 import { useNavigate } from 'react-router-dom';
 import { Waves } from '@/components/ui/waves-background';
 
+const DEPLOYER_ADDRESS = '0x2d4f73d89645c5558126cea3489c79f9498b5a66'; // Must match BlockchainContext
+
 const Landing = () => {
-  const { connectWallet, isLoading, isConnected, setRole, error } = useBlockchain();
+  const { connectWallet, isLoading, isConnected, role, error, account } = useBlockchain();
   const [showRoleSelect, setShowRoleSelect] = useState(false);
   const navigate = useNavigate();
 
+  // Check if current user is the deployer
+  const isDeployer = account?.toLowerCase() === DEPLOYER_ADDRESS.toLowerCase();
+
+  // Show role selection after wallet is connected
+  useEffect(() => {
+    if (isConnected && account) {
+      // If deployer, always show role selection
+      // If not deployer, show selection only if they have a role
+      if (isDeployer || role !== null) {
+        setShowRoleSelect(true);
+      }
+    }
+  }, [isConnected, account, isDeployer, role]);
+
   const handleConnect = async () => {
     await connectWallet();
-    setShowRoleSelect(true);
   };
 
-  const handleRoleSelect = (role: 'admin' | 'pharmacy') => {
-    setRole(role);
-    navigate(role === 'admin' ? '/admin' : '/pharmacy');
+  const handleRoleSelect = (selectedRole: 'admin' | 'pharmacy') => {
+    navigate(selectedRole === 'admin' ? '/admin' : '/pharmacy');
   };
 
   const features = [
@@ -99,69 +113,159 @@ const Landing = () => {
 
               <StaggerItem>
                 {!isConnected ? (
-                  <Button
-                    variant="hero"
-                    size="xl"
-                    onClick={handleConnect}
-                    disabled={isLoading}
-                    className="group"
-                  >
-                    {isLoading ? (
-                      <>
-                        <motion.div
-                          animate={{ rotate: 360 }}
-                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                          className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
-                        />
-                        Connecting...
-                      </>
-                    ) : (
-                      <>
-                        <Wallet className="w-5 h-5" />
-                        Connect Wallet
-                        <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                      </>
-                    )}
-                  </Button>
+                  <div>
+                    <Button
+                      variant="hero"
+                      size="xl"
+                      onClick={handleConnect}
+                      disabled={isLoading}
+                      className="group"
+                    >
+                      {isLoading ? (
+                        <>
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                            className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full"
+                          />
+                          Connecting to MetaMask...
+                        </>
+                      ) : (
+                        <>
+                          <Wallet className="w-5 h-5" />
+                          Connect Wallet
+                          <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                        </>
+                      )}
+                    </Button>
+                    <p className="text-sm text-muted-foreground mt-4">
+                      Make sure MetaMask is installed and connected to the correct network
+                    </p>
+                  </div>
                 ) : showRoleSelect ? (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="space-y-4"
                   >
-                    <p className="text-muted-foreground mb-4">Select your role to continue:</p>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                      <Button
-                        variant="default"
-                        size="lg"
-                        onClick={() => handleRoleSelect('admin')}
-                        className="min-w-[200px]"
-                      >
-                        <Shield className="w-5 h-5 mr-2" />
-                        Admin Dashboard
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="lg"
-                        onClick={() => handleRoleSelect('pharmacy')}
-                        className="min-w-[200px]"
-                      >
-                        <Database className="w-5 h-5 mr-2" />
-                        Pharmacy Staff
-                      </Button>
+                    <div className="rounded-xl bg-muted/50 border border-border p-6 max-w-md mx-auto">
+                      <p className="text-foreground font-medium mb-2">Connected Wallet:</p>
+                      <p className="text-sm text-muted-foreground font-mono break-all mb-4">
+                        {account}
+                      </p>
+                      
+                      {/* Deployer has access to both dashboards */}
+                      {isDeployer ? (
+                        <div>
+                          <div className="rounded-lg bg-success/10 border border-success/20 p-4 mb-6">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Shield className="w-5 h-5 text-success" />
+                              <p className="text-success font-medium">
+                                Contract Deployer Detected
+                              </p>
+                            </div>
+                            <p className="text-success/80 text-sm">
+                              As the contract deployer, you have full access to both Admin and Pharmacy dashboards.
+                            </p>
+                          </div>
+
+                          <p className="text-muted-foreground mb-4">Choose your dashboard:</p>
+                          <div className="flex flex-col gap-3">
+                            <Button
+                              variant="default"
+                              size="lg"
+                              onClick={() => handleRoleSelect('admin')}
+                              className="w-full group"
+                            >
+                              <Shield className="w-5 h-5 mr-2" />
+                              Admin Dashboard
+                              <ChevronRight className="w-4 h-4 ml-auto group-hover:translate-x-1 transition-transform" />
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="lg"
+                              onClick={() => handleRoleSelect('pharmacy')}
+                              className="w-full group"
+                            >
+                              <Users className="w-5 h-5 mr-2" />
+                              Pharmacy Dashboard
+                              <ChevronRight className="w-4 h-4 ml-auto group-hover:translate-x-1 transition-transform" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : role === 'admin' ? (
+                        <div>
+                          <div className="rounded-lg bg-primary/10 border border-primary/20 p-4 mb-4">
+                            <div className="flex items-center gap-2">
+                              <Shield className="w-5 h-5 text-primary" />
+                              <p className="text-primary font-medium">
+                                Admin Role Detected
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="default"
+                            size="lg"
+                            onClick={() => handleRoleSelect('admin')}
+                            className="w-full"
+                          >
+                            <Shield className="w-5 h-5 mr-2" />
+                            Go to Admin Dashboard
+                            <ChevronRight className="w-4 h-4 ml-auto" />
+                          </Button>
+                        </div>
+                      ) : role === 'pharmacy' ? (
+                        <div>
+                          <div className="rounded-lg bg-primary/10 border border-primary/20 p-4 mb-4">
+                            <div className="flex items-center gap-2">
+                              <Users className="w-5 h-5 text-primary" />
+                              <p className="text-primary font-medium">
+                                Pharmacy Staff Role Detected
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="default"
+                            size="lg"
+                            onClick={() => handleRoleSelect('pharmacy')}
+                            className="w-full"
+                          >
+                            <Database className="w-5 h-5 mr-2" />
+                            Go to Pharmacy Dashboard
+                            <ChevronRight className="w-4 h-4 ml-auto" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4">
+                          <p className="text-destructive text-sm font-medium mb-2">
+                            ⚠️ No Role Assigned
+                          </p>
+                          <p className="text-destructive/80 text-xs">
+                            This wallet does not have admin or pharmacy staff permissions.
+                            <br />
+                            <br />
+                            Contact the contract administrator (deployer) to assign you a role using the <code className="bg-destructive/20 px-1 rounded">assignRole()</code> function.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 ) : null}
               </StaggerItem>
 
               {error && (
-                <motion.p
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="text-destructive mt-4"
+                  className="mt-6 rounded-xl bg-destructive/10 border border-destructive/20 p-4 max-w-md mx-auto"
                 >
-                  {error}
-                </motion.p>
+                  <p className="text-destructive text-sm font-medium mb-2">
+                    ⚠️ Error
+                  </p>
+                  <p className="text-destructive/80 text-xs">
+                    {error}
+                  </p>
+                </motion.div>
               )}
             </StaggerContainer>
           </div>

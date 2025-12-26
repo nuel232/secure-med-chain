@@ -3,8 +3,33 @@ import { ethers } from 'ethers';
 import * as drugService from '@/services/drugInventoryService';
 import { BlockchainContext, type BlockchainContextType, type UserRole, type Drug, type TransactionLog } from './BlockchainContextTypes';
 
-// Simulated blockchain data (for demo purposes)
-const generateTxHash = () => '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+const CONTRACT_ADDRESS = '0xC90b1698CA23D540d1F448F3122D6bd3BD4FAD71';
+// IMPORTANT: Replace this with the address that deployed the smart contract
+const DEPLOYER_ADDRESS = '0x2d4f73d89645c5558126cea3489c79f9498b5a66'; // Your deployer address from the image
+
+// Type for MetaMask's ethereum provider
+interface MetaMaskEthereum {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on: (eventName: string, handler: (...args: unknown[]) => void) => void;
+  removeListener: (eventName: string, handler: (...args: unknown[]) => void) => void;
+}
+
+// Extend Window interface for ethereum
+declare global {
+  interface Window {
+    ethereum?: MetaMaskEthereum;
+  }
+}
+
+// Type for drug data from smart contract
+interface ContractDrug {
+  id: string;
+  name: string;
+  quantity: string;
+  expiryDate: string;
+  addedBy: string;
+  active: boolean;
+}
 
 export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -14,79 +39,69 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [transactionLogs, setTransactionLogs] = useState<TransactionLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
+  const [signer, setSigner] = useState<ethers.Signer | null>(null);
 
-  // Initialize with sample data
-  useEffect(() => {
-    const sampleDrugs: Drug[] = [
-      {
-        id: 1,
-        name: 'Paracetamol 500mg',
-        quantity: 1000,
-        expiryDate: Date.now() + 365 * 24 * 60 * 60 * 1000,
-        addedBy: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-        timestamp: Date.now() - 7 * 24 * 60 * 60 * 1000,
-      },
-      {
-        id: 2,
-        name: 'Amoxicillin 250mg',
-        quantity: 500,
-        expiryDate: Date.now() + 180 * 24 * 60 * 60 * 1000,
-        addedBy: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-        timestamp: Date.now() - 5 * 24 * 60 * 60 * 1000,
-      },
-      {
-        id: 3,
-        name: 'Ibuprofen 400mg',
-        quantity: 750,
-        expiryDate: Date.now() + 90 * 24 * 60 * 60 * 1000,
-        addedBy: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-        timestamp: Date.now() - 3 * 24 * 60 * 60 * 1000,
-      },
-      {
-        id: 4,
-        name: 'Expired Test Drug',
-        quantity: 100,
-        expiryDate: Date.now() - 30 * 24 * 60 * 60 * 1000,
-        addedBy: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-        timestamp: Date.now() - 60 * 24 * 60 * 60 * 1000,
-      },
-    ];
+  // Load drugs from blockchain
+  const loadDrugs = useCallback(async (providerInstance: ethers.BrowserProvider) => {
+    try {
+      console.log('Loading drugs from blockchain...');
+      const allDrugs = await drugService.getAllDrugs(providerInstance);
+      console.log('Drugs loaded from blockchain:', allDrugs);
+      
+      const mappedDrugs: Drug[] = allDrugs.map((drug: ContractDrug) => ({
+        id: parseInt(drug.id),
+        name: drug.name,
+        quantity: parseInt(drug.quantity),
+        expiryDate: parseInt(drug.expiryDate) * 1000, // Convert to milliseconds
+        addedBy: drug.addedBy,
+        timestamp: Date.now(),
+      }));
+      
+      setDrugs(mappedDrugs);
+      setError(null); // Clear any previous errors
+    } catch (err) {
+      console.error('Error loading drugs:', err);
+      const error = err as Error;
+      setError(`Failed to load drugs from blockchain: ${error.message}`);
+    }
+  }, []);
 
-    const sampleLogs: TransactionLog[] = [
-      {
-        id: '1',
-        type: 'ADD_DRUG',
-        drugId: 1,
-        drugName: 'Paracetamol 500mg',
-        quantity: 1000,
-        performer: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-        timestamp: Date.now() - 7 * 24 * 60 * 60 * 1000,
-        txHash: generateTxHash(),
-      },
-      {
-        id: '2',
-        type: 'ADD_DRUG',
-        drugId: 2,
-        drugName: 'Amoxicillin 250mg',
-        quantity: 500,
-        performer: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-        timestamp: Date.now() - 5 * 24 * 60 * 60 * 1000,
-        txHash: generateTxHash(),
-      },
-      {
-        id: '3',
-        type: 'DISPENSE_DRUG',
-        drugId: 1,
-        drugName: 'Paracetamol 500mg',
-        quantity: 50,
-        performer: '0x8ba1f109551bD432803012645Hc136E7aF9bA36',
-        timestamp: Date.now() - 2 * 24 * 60 * 60 * 1000,
-        txHash: generateTxHash(),
-      },
-    ];
+  // Determine user role from blockchain
+  const determineRole = useCallback(async (
+    address: string,
+    providerInstance: ethers.BrowserProvider
+  ): Promise<UserRole> => {
+    try {
+      console.log('Determining role for address:', address);
+      console.log('Deployer address:', DEPLOYER_ADDRESS);
+      
+      // Check if user is the deployer (contract deployer gets full admin access)
+      if (address.toLowerCase() === DEPLOYER_ADDRESS.toLowerCase()) {
+        console.log('User is contract deployer - granting admin role');
+        return 'admin';
+      }
 
-    setDrugs(sampleDrugs);
-    setTransactionLogs(sampleLogs);
+      // Check if user has admin role from contract
+      const isAdminRole = await drugService.isAdmin(providerInstance, address);
+      console.log('Is admin from contract:', isAdminRole);
+      if (isAdminRole) {
+        return 'admin';
+      }
+
+      // Check if user has pharmacy staff role
+      const isPharmacyRole = await drugService.isPharmacyStaff(providerInstance, address);
+      console.log('Is pharmacy staff from contract:', isPharmacyRole);
+      if (isPharmacyRole) {
+        return 'pharmacy';
+      }
+
+      console.log('No role assigned for this address');
+      return null;
+    } catch (err) {
+      console.error('Error determining role:', err);
+      return null;
+    }
   }, []);
 
   const connectWallet = useCallback(async () => {
@@ -95,59 +110,112 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     try {
       // Check if MetaMask is installed
-      const ethereum = typeof window !== 'undefined' 
-        ? (window as unknown as Record<string, unknown>).ethereum as ethers.Eip1193Provider | undefined
-        : undefined;
-      
-      if (ethereum) {
-        const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
-        
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          setIsConnected(true);
-          
-          // Try to load drugs from smart contract
-          try {
-            const provider = new ethers.BrowserProvider(ethereum);
-            const allDrugs = await drugService.getAllDrugs(provider);
-            
-            const mappedDrugs: Drug[] = allDrugs.map((drug: { id: string; name: string; quantity: string; expiryDate: string; addedBy: string }) => ({
-              id: parseInt(drug.id),
-              name: drug.name,
-              quantity: parseInt(drug.quantity),
-              expiryDate: parseInt(drug.expiryDate) * 1000, // Convert to ms
-              addedBy: drug.addedBy,
-              timestamp: Date.now(),
-            }));
-            
-            setDrugs(mappedDrugs);
-          } catch (err) {
-            console.warn('Could not fetch drugs from contract:', err);
-            // Keep sample data as fallback
-          }
-        }
-      } else {
-        // Simulate wallet connection for demo
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const simulatedAccount = '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-        setAccount(simulatedAccount);
-        setIsConnected(true);
+      if (typeof window.ethereum === 'undefined') {
+        throw new Error('MetaMask is not installed. Please install MetaMask to continue.');
       }
+
+      const ethereum = window.ethereum;
+      
+      // Request account access
+      const accounts = await ethereum.request({ 
+        method: 'eth_requestAccounts' 
+      }) as string[];
+
+      if (accounts.length === 0) {
+        throw new Error('No accounts found. Please connect to MetaMask.');
+      }
+
+      const userAccount = accounts[0];
+      console.log('Connected account:', userAccount);
+      
+      // Create provider and signer
+      const providerInstance = new ethers.BrowserProvider(ethereum);
+      const signerInstance = await providerInstance.getSigner();
+
+      // Get network info
+      const network = await providerInstance.getNetwork();
+      console.log('Connected to network:', network.name, 'Chain ID:', network.chainId);
+
+      setProvider(providerInstance);
+      setSigner(signerInstance);
+      setAccount(userAccount);
+      setIsConnected(true);
+
+      // Determine user role from blockchain
+      const userRole = await determineRole(userAccount, providerInstance);
+      console.log('User role determined:', userRole);
+      setRole(userRole);
+
+      // Load drugs from blockchain (even if no role, to show connection works)
+      await loadDrugs(providerInstance);
+
+      // Listen for account changes
+      const handleAccountsChanged = async (newAccounts: unknown) => {
+        const accountsArray = newAccounts as string[];
+        if (accountsArray.length === 0) {
+          // User disconnected wallet
+          disconnectWallet();
+        } else {
+          // User switched accounts
+          const newAccount = accountsArray[0];
+          console.log('Account changed to:', newAccount);
+          setAccount(newAccount);
+          const newRole = await determineRole(newAccount, providerInstance);
+          setRole(newRole);
+          await loadDrugs(providerInstance);
+        }
+      };
+
+      const handleChainChanged = () => {
+        console.log('Chain changed, reloading...');
+        window.location.reload();
+      };
+
+      ethereum.on('accountsChanged', handleAccountsChanged);
+      ethereum.on('chainChanged', handleChainChanged);
+
     } catch (err) {
-      setError('Failed to connect wallet. Please try again.');
-      console.error(err);
+      const error = err as Error;
+      console.error('Wallet connection error:', error);
+      setError(error.message || 'Failed to connect wallet');
+      setIsConnected(false);
     } finally {
       setIsLoading(false);
     }
+  }, [determineRole, loadDrugs]);
+
+  // Cleanup event listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (window.ethereum) {
+        // Remove all listeners when component unmounts
+        window.ethereum.removeListener('accountsChanged', () => {});
+        window.ethereum.removeListener('chainChanged', () => {});
+      }
+    };
   }, []);
 
   const disconnectWallet = useCallback(() => {
     setIsConnected(false);
     setAccount(null);
     setRole(null);
+    setProvider(null);
+    setSigner(null);
+    setDrugs([]);
+    setTransactionLogs([]);
+    setError(null);
   }, []);
 
-  const addDrug = useCallback(async (name: string, quantity: number, expiryDate: Date): Promise<boolean> => {
+  const addDrug = useCallback(async (
+    name: string,
+    quantity: number,
+    expiryDate: Date
+  ): Promise<boolean> => {
+    if (!signer) {
+      setError('Wallet not connected');
+      return false;
+    }
+
     if (role !== 'admin') {
       setError('Only admins can add drugs');
       return false;
@@ -157,42 +225,72 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setError(null);
 
     try {
-      // Simulate blockchain transaction
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Convert date to Unix timestamp
+      const expiryTimestamp = Math.floor(expiryDate.getTime() / 1000);
 
-      const newDrug: Drug = {
-        id: drugs.length + 1,
+      console.log('Adding drug to blockchain:', { name, quantity, expiryTimestamp });
+
+      // Call smart contract function
+      const receipt = await drugService.addDrug(
+        signer,
         name,
         quantity,
-        expiryDate: expiryDate.getTime(),
-        addedBy: account!,
-        timestamp: Date.now(),
-      };
+        expiryTimestamp
+      );
 
+      console.log('Drug added successfully! Transaction:', receipt.hash);
+
+      // Reload drugs from blockchain
+      if (provider) {
+        await loadDrugs(provider);
+      }
+
+      // Add to transaction logs
       const newLog: TransactionLog = {
         id: String(transactionLogs.length + 1),
         type: 'ADD_DRUG',
-        drugId: newDrug.id,
+        drugId: drugs.length + 1,
         drugName: name,
         quantity,
         performer: account!,
         timestamp: Date.now(),
-        txHash: generateTxHash(),
+        txHash: receipt.hash || '',
       };
-
-      setDrugs(prev => [...prev, newDrug]);
       setTransactionLogs(prev => [newLog, ...prev]);
-      
+
       return true;
     } catch (err) {
-      setError('Failed to add drug. Transaction reverted.');
+      const error = err as Error & { message?: string; code?: string };
+      console.error('Error adding drug:', error);
+      
+      // Parse error message
+      let errorMessage = 'Failed to add drug';
+      if (error.message) {
+        if (error.message.includes('Only admin')) {
+          errorMessage = 'Only admin can add drugs';
+        } else if (error.message.includes('user rejected') || error.code === 'ACTION_REJECTED') {
+          errorMessage = 'Transaction was rejected';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      setError(errorMessage);
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, [role, account, drugs.length, transactionLogs.length]);
+  }, [signer, role, account, provider, drugs.length, transactionLogs.length, loadDrugs]);
 
-  const dispenseDrug = useCallback(async (drugId: number, quantity: number): Promise<boolean> => {
+  const dispenseDrug = useCallback(async (
+    drugId: number,
+    quantity: number
+  ): Promise<boolean> => {
+    if (!signer) {
+      setError('Wallet not connected');
+      return false;
+    }
+
     if (role !== 'pharmacy') {
       setError('Only pharmacy staff can dispense drugs');
       return false;
@@ -204,23 +302,27 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return false;
     }
 
-    if (drug.expiryDate < Date.now()) {
-      setError('Cannot dispense expired drugs');
-      return false;
-    }
-
-    if (drug.quantity < quantity) {
-      setError('Insufficient quantity');
-      return false;
-    }
-
     setIsLoading(true);
     setError(null);
 
     try {
-      // Simulate blockchain transaction
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('Dispensing drug from blockchain:', { drugId, quantity });
 
+      // Call smart contract function
+      const receipt = await drugService.dispenseDrug(
+        signer,
+        drugId,
+        quantity
+      );
+
+      console.log('Drug dispensed successfully! Transaction:', receipt.hash);
+
+      // Reload drugs from blockchain
+      if (provider) {
+        await loadDrugs(provider);
+      }
+
+      // Add to transaction logs
       const newLog: TransactionLog = {
         id: String(transactionLogs.length + 1),
         type: 'DISPENSE_DRUG',
@@ -229,22 +331,43 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         quantity,
         performer: account!,
         timestamp: Date.now(),
-        txHash: generateTxHash(),
+        txHash: receipt.hash || '',
       };
-
-      setDrugs(prev => prev.map(d => 
-        d.id === drugId ? { ...d, quantity: d.quantity - quantity } : d
-      ));
       setTransactionLogs(prev => [newLog, ...prev]);
 
       return true;
     } catch (err) {
-      setError('Failed to dispense drug. Transaction reverted.');
+      const error = err as Error & { message?: string; code?: string };
+      console.error('Error dispensing drug:', error);
+      
+      // Parse error message
+      let errorMessage = 'Failed to dispense drug';
+      if (error.message) {
+        if (error.message.includes('Only pharmacy staff')) {
+          errorMessage = 'Only pharmacy staff can dispense drugs';
+        } else if (error.message.includes('expired')) {
+          errorMessage = 'Cannot dispense expired drugs';
+        } else if (error.message.includes('Insufficient')) {
+          errorMessage = 'Insufficient quantity available';
+        } else if (error.message.includes('user rejected') || error.code === 'ACTION_REJECTED') {
+          errorMessage = 'Transaction was rejected';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      setError(errorMessage);
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, [role, account, drugs, transactionLogs.length]);
+  }, [signer, role, account, drugs, provider, transactionLogs.length, loadDrugs]);
+
+  // Manual role setter (should only be used for testing)
+  const setRoleManually = useCallback((newRole: UserRole) => {
+    console.warn('Setting role manually - this should only be used for testing');
+    setRole(newRole);
+  }, []);
 
   return (
     <BlockchainContext.Provider
@@ -260,7 +383,7 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         disconnectWallet,
         addDrug,
         dispenseDrug,
-        setRole,
+        setRole: setRoleManually,
       }}
     >
       {children}
