@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Shield, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { useBlockchain } from '@/contexts/BlockchainContext';
+import { useBlockchain } from '@/hooks/useBlockchain';
 import { useNavigate } from 'react-router-dom';
 
 export const Header = () => {

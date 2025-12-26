@@ -1,44 +1,7 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-
-// Types
-export interface Drug {
-  id: number;
-  name: string;
-  quantity: number;
-  expiryDate: number; // Unix timestamp
-  addedBy: string;
-  timestamp: number;
-}
-
-export interface TransactionLog {
-  id: string;
-  type: 'ADD_DRUG' | 'DISPENSE_DRUG';
-  drugId: number;
-  drugName: string;
-  quantity: number;
-  performer: string;
-  timestamp: number;
-  txHash: string;
-}
-
-export type UserRole = 'admin' | 'pharmacy' | null;
-
-interface BlockchainContextType {
-  isConnected: boolean;
-  account: string | null;
-  role: UserRole;
-  drugs: Drug[];
-  transactionLogs: TransactionLog[];
-  isLoading: boolean;
-  error: string | null;
-  connectWallet: () => Promise<void>;
-  disconnectWallet: () => void;
-  addDrug: (name: string, quantity: number, expiryDate: Date) => Promise<boolean>;
-  dispenseDrug: (drugId: number, quantity: number) => Promise<boolean>;
-  setRole: (role: UserRole) => void;
-}
-
-const BlockchainContext = createContext<BlockchainContextType | undefined>(undefined);
+import React, { useState, useCallback, useEffect } from 'react';
+import { ethers } from 'ethers';
+import * as drugService from '@/services/drugInventoryService';
+import { BlockchainContext, type BlockchainContextType, type UserRole, type Drug, type TransactionLog } from './BlockchainContextTypes';
 
 // Simulated blockchain data (for demo purposes)
 const generateTxHash = () => '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -132,13 +95,36 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     try {
       // Check if MetaMask is installed
-      if (typeof window !== 'undefined' && (window as any).ethereum) {
-        const ethereum = (window as any).ethereum;
+      const ethereum = typeof window !== 'undefined' 
+        ? (window as unknown as Record<string, unknown>).ethereum as ethers.Eip1193Provider | undefined
+        : undefined;
+      
+      if (ethereum) {
         const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
         
         if (accounts.length > 0) {
           setAccount(accounts[0]);
           setIsConnected(true);
+          
+          // Try to load drugs from smart contract
+          try {
+            const provider = new ethers.BrowserProvider(ethereum);
+            const allDrugs = await drugService.getAllDrugs(provider);
+            
+            const mappedDrugs: Drug[] = allDrugs.map((drug: { id: string; name: string; quantity: string; expiryDate: string; addedBy: string }) => ({
+              id: parseInt(drug.id),
+              name: drug.name,
+              quantity: parseInt(drug.quantity),
+              expiryDate: parseInt(drug.expiryDate) * 1000, // Convert to ms
+              addedBy: drug.addedBy,
+              timestamp: Date.now(),
+            }));
+            
+            setDrugs(mappedDrugs);
+          } catch (err) {
+            console.warn('Could not fetch drugs from contract:', err);
+            // Keep sample data as fallback
+          }
         }
       } else {
         // Simulate wallet connection for demo
@@ -280,12 +266,4 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       {children}
     </BlockchainContext.Provider>
   );
-};
-
-export const useBlockchain = () => {
-  const context = useContext(BlockchainContext);
-  if (context === undefined) {
-    throw new Error('useBlockchain must be used within a BlockchainProvider');
-  }
-  return context;
 };

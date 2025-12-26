@@ -8,7 +8,7 @@ import { Header } from '@/components/shared/Header';
 import { DrugCard } from '@/components/shared/DrugCard';
 import { TransactionLogCard } from '@/components/shared/TransactionLog';
 import { PageTransition, StaggerContainer, StaggerItem } from '@/components/layout/PageTransition';
-import { useBlockchain } from '@/contexts/BlockchainContext';
+import { useBlockchain } from '@/hooks/useBlockchain';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 

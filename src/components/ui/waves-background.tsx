@@ -1,7 +1,4 @@
-"use client";
-
 import { useRef, useEffect, useState } from "react";
-import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 
 interface WavesProps {
@@ -109,7 +106,7 @@ class Noise {
     seed = Math.floor(seed)
     if (seed < 256) seed |= seed << 8
     for (let i = 0; i < 256; i++) {
-      let v = i & 1 ? this.p[i] ^ (seed & 255) : this.p[i] ^ ((seed >> 8) & 255)
+      const v = i & 1 ? this.p[i] ^ (seed & 255) : this.p[i] ^ ((seed >> 8) & 255)
       this.perm[i] = this.perm[i + 256] = v
       this.gradP[i] = this.gradP[i + 256] = this.grad3[v % 12]
     }
@@ -144,7 +141,7 @@ class Noise {
 }
 
 export function Waves({
-  lineColor,
+  lineColor = "hsl(var(--foreground))",
   backgroundColor = "transparent",
   waveSpeedX = 0.0125,
   waveSpeedY = 0.005,
@@ -176,17 +173,6 @@ export function Waves({
     set: false,
   })
   const [isMobile, setIsMobile] = useState(false);
-  const { theme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  // Wait for component to mount to avoid hydration mismatch
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Determine line color based on theme if not provided
-  const isDark = mounted && (resolvedTheme === 'dark' || theme === 'dark');
-  const effectiveLineColor = lineColor || (isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.08)");
 
   useEffect(() => {
     const checkMobile = () => {
@@ -210,8 +196,8 @@ export function Waves({
       const movePoints = (time: number) => {
         const lines = linesRef.current;
         const noise = noiseRef.current;
-        lines.forEach((pts: any) => {
-          pts.forEach((p: any) => {
+        lines.forEach((pts: Point[]) => {
+          pts.forEach((p: Point) => {
             const move =
               noise.perlin2(
                 (p.x + time * waveSpeedX) * 0.002,
@@ -228,11 +214,11 @@ export function Waves({
         if (!ctx) return;
         ctx.clearRect(0, 0, width, height);
         ctx.beginPath();
-        ctx.strokeStyle = effectiveLineColor;
-        linesRef.current.forEach((points: any) => {
+        ctx.strokeStyle = lineColor;
+        linesRef.current.forEach((points: Point[]) => {
           let p1 = moved(points[0]);
           ctx.moveTo(p1.x, p1.y);
-          points.forEach((p: any, idx: number) => {
+          points.forEach((p: Point, idx: number) => {
             const isLast = idx === points.length - 1;
             p1 = moved(p);
             const p2 = moved(points[idx + 1] || points[points.length - 1]);
@@ -267,8 +253,8 @@ export function Waves({
         const lines = linesRef.current;
         const mouse = mouseRef.current;
         const noise = noiseRef.current;
-        lines.forEach((pts: any) => {
-          pts.forEach((p: any) => {
+        lines.forEach((pts: Point[]) => {
+          pts.forEach((p: Point) => {
             const move =
               noise.perlin2(
                 (p.x + time * waveSpeedX) * 0.002,
@@ -312,11 +298,11 @@ export function Waves({
         if (!ctx) return;
         ctx.clearRect(0, 0, width, height);
         ctx.beginPath();
-        ctx.strokeStyle = effectiveLineColor;
-        linesRef.current.forEach((points: any) => {
+        ctx.strokeStyle = lineColor;
+        linesRef.current.forEach((points: Point[]) => {
           let p1 = moved(points[0], false);
           ctx.moveTo(p1.x, p1.y);
-          points.forEach((p: any, idx: number) => {
+          points.forEach((p: Point, idx: number) => {
             const isLast = idx === points.length - 1;
             p1 = moved(p, !isLast);
             const p2 = moved(
@@ -371,7 +357,7 @@ export function Waves({
       };
     }
   }, [
-    effectiveLineColor,
+    lineColor,
     backgroundColor,
     waveSpeedX,
     waveSpeedY,
@@ -383,9 +369,6 @@ export function Waves({
     xGap,
     yGap,
     isMobile,
-    theme,
-    resolvedTheme,
-    mounted,
   ]);
 
   return (
@@ -395,7 +378,7 @@ export function Waves({
         backgroundColor,
       }}
       className={cn(
-        "absolute inset-0 w-full h-full overflow-hidden",
+        "relative w-full h-full overflow-hidden",
         className,
       )}
     >
@@ -417,14 +400,14 @@ export function Waves({
   )
 }
 
-function setSize(container: HTMLDivElement | null, canvas: HTMLCanvasElement | null, boundingRef: any) {
+function setSize(container: HTMLDivElement | null, canvas: HTMLCanvasElement | null, boundingRef: React.MutableRefObject<DOMRect | { width: number; height: number; left: number; top: number }>) {
   if (!container || !canvas) return;
   boundingRef.current = container.getBoundingClientRect();
   canvas.width = boundingRef.current.width;
   canvas.height = boundingRef.current.height;
 }
 
-function setLines(boundingRef: any, linesRef: any, xGap: number, yGap: number) {
+function setLines(boundingRef: React.MutableRefObject<DOMRect | { width: number; height: number; left: number; top: number }>, linesRef: React.MutableRefObject<Point[][]>, xGap: number, yGap: number) {
   const { width, height } = boundingRef.current;
   linesRef.current = [];
   const oWidth = width + 200,
@@ -434,7 +417,7 @@ function setLines(boundingRef: any, linesRef: any, xGap: number, yGap: number) {
   const xStart = (width - xGap * totalLines) / 2;
   const yStart = (height - yGap * totalPoints) / 2;
   for (let i = 0; i <= totalLines; i++) {
-    const pts = [];
+    const pts: Point[] = [];
     for (let j = 0; j <= totalPoints; j++) {
       pts.push({
         x: xStart + xGap * i,
@@ -447,9 +430,8 @@ function setLines(boundingRef: any, linesRef: any, xGap: number, yGap: number) {
   }
 }
 
-function moved(point: any, withCursor: boolean = true) {
+function moved(point: Point, withCursor: boolean = true) {
   const x = point.x + point.wave.x + (withCursor && point.cursor ? point.cursor.x : 0);
   const y = point.y + point.wave.y + (withCursor && point.cursor ? point.cursor.y : 0);
   return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
 }
-

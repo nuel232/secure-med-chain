@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Header } from '@/components/shared/Header';
 import { DrugCard } from '@/components/shared/DrugCard';
 import { PageTransition, StaggerContainer, StaggerItem } from '@/components/layout/PageTransition';
-import { useBlockchain, Drug } from '@/contexts/BlockchainContext';
+import { useBlockchain } from '@/hooks/useBlockchain';
+import type { Drug } from '@/contexts/BlockchainContextTypes';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 
