@@ -8,6 +8,7 @@ Secure MedChain is a healthcare application that uses blockchain technology to m
 - **Blockchain-Secured Inventory**: All drug records stored on the Sepolia testnet blockchain
 - **Automatic Role Detection**: Users are automatically classified as Admin (contract deployer) or Pharmacy Staff (all other addresses)
 - **Drug Management**: Add, track, and dispense medications with expiry date tracking
+- **Batch CSV Import**: Import multiple drugs at once from a CSV file with validation
 - **Transaction History**: Immutable record of all inventory transactions
 - **Real-time Synchronization**: Live updates of inventory status across the system
 
@@ -136,6 +137,72 @@ secure-med-chain/
 
 ---
 
+## CSV Batch Import Guide
+
+### CSV File Format
+
+Your CSV file must have the following structure:
+
+**Header Row (Required):**
+```
+name,quantity,expiryDate
+```
+
+**Data Rows:**
+```
+name,quantity,expiryDate
+Paracetamol 500mg,1000,2025-12-31
+Aspirin 100mg,500,2026-06-15
+Ibuprofen 200mg,750,2026-03-20
+```
+
+### Field Requirements
+
+- **name**: Drug name (string, max 255 characters)
+- **quantity**: Number of units (positive integer)
+- **expiryDate**: Date in YYYY-MM-DD format (must be future date)
+
+### Import Process
+
+1. Click **"Import CSV"** button on Admin Dashboard
+2. Download sample template if needed (contains example format)
+3. Select your CSV file
+4. System validates all rows instantly
+5. Valid rows shown in green, invalid rows in red with error messages
+6. Review validation results before import
+7. Click **"Import [N] Valid Drugs"** to proceed
+8. Approve transactions in MetaMask (one per drug)
+9. System shows import summary with success/failure counts
+
+### Validation Rules
+
+The system validates each row for:
+- ✅ Drug name not empty and under 255 characters
+- ✅ Quantity is a positive number
+- ✅ Expiry date follows YYYY-MM-DD format
+- ✅ Expiry date is in the future
+- ✅ No duplicate entries in the same import
+
+### Common Errors & Solutions
+
+| Error | Solution |
+|-------|----------|
+| "Drug name is required" | Ensure first column has a value |
+| "Quantity must be a positive number" | Use whole numbers only (1, 100, 500, etc.) |
+| "Expiry date must be in YYYY-MM-DD format" | Use format like 2025-12-31 |
+| "Expiry date must be in the future" | Use a date after today's date |
+| "CSV file is empty" | Ensure file has at least one data row (plus header) |
+
+### Tips for Best Results
+
+- **Use the Sample Template**: Download the provided sample CSV to ensure correct format
+- **Test First**: Try importing a small batch first to test your workflow
+- **Keep Names Consistent**: Use standardized naming across your pharmacy
+- **Batch Errors**: Invalid rows won't block valid rows - only valid rows are imported
+- **Confirmation Times**: Each drug requires blockchain confirmation (10-30 seconds)
+
+---
+
 ## Smart Contract Reference
 
 ### Contract: DrugInventory.sol
@@ -203,6 +270,8 @@ function isExpired(uint256 drugId) external view returns (bool)
 
 ### For Admin Users
 
+#### Adding Drugs Individually
+
 1. **Connect Wallet**
    - Go to Landing page
    - Click "Connect Wallet"
@@ -212,9 +281,38 @@ function isExpired(uint256 drugId) external view returns (bool)
 2. **Add Drugs** (Admin Dashboard)
    - Navigate to Admin Dashboard
    - Fill in drug name, quantity, and expiry date
-   - Click "Add Drug"
+   - Click "Add New Drug"
    - Approve transaction in MetaMask
    - Drug appears in inventory after confirmation
+
+#### Batch Import Drugs from CSV
+
+1. **Prepare CSV File**
+   - Format: `name,quantity,expiryDate`
+   - Each row represents one drug
+   - Date format must be YYYY-MM-DD
+   - Example:
+     ```
+     name,quantity,expiryDate
+     Paracetamol 500mg,1000,2025-12-31
+     Aspirin 100mg,500,2026-06-15
+     Ibuprofen 200mg,750,2026-03-20
+     ```
+
+2. **Import Drugs**
+   - Navigate to Admin Dashboard
+   - Click "Import CSV" button
+   - Download sample template if needed
+   - Select your CSV file
+   - Review validation results (valid/invalid rows)
+   - Click "Import [N] Valid Drugs"
+   - Approve transactions in MetaMask
+
+3. **Monitor Import Progress**
+   - System validates each row during upload
+   - Preview shows which drugs will be imported
+   - Invalid rows are highlighted with error messages
+   - Can import only valid rows or choose different file
 
 3. **Dispense Drugs** (Pharmacy Dashboard)
    - Navigate to Pharmacy Dashboard

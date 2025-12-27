@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
-import { Plus, Package, History, Search, X, Calendar } from 'lucide-react';
+import { Plus, Package, History, Search, X, Calendar, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,8 @@ import { PageTransition, StaggerContainer, StaggerItem } from '@/components/layo
 import { useBlockchain } from '@/hooks/useBlockchain';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { CSVImportModal } from '@/components/CSVImportModal';
+import { DrugImportRow } from '@/utils/csvParser';
 
 type Tab = 'drugs' | 'logs' | 'add';
 
@@ -19,6 +21,8 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState<Tab>('drugs');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showCSVImportModal, setShowCSVImportModal] = useState(false);
+  const [csvImporting, setCSVImporting] = useState(false);
   const [newDrug, setNewDrug] = useState({ name: '', quantity: '', expiryDate: '' });
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -58,6 +62,48 @@ const AdminDashboard = () => {
       setShowAddModal(false);
       setActiveTab('drugs');
     }
+  };
+
+  const handleCSVImport = async (drugs: DrugImportRow[]) => {
+    setCSVImporting(true);
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const drug of drugs) {
+      try {
+        const success = await addDrug(
+          drug.name,
+          drug.quantity,
+          new Date(drug.expiryDate)
+        );
+
+        if (success) {
+          successCount++;
+        } else {
+          failureCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to add drug: ${drug.name}`, error);
+        failureCount++;
+      }
+    }
+
+    setCSVImporting(false);
+
+    if (failureCount === 0) {
+      toast({
+        title: 'Success',
+        description: `Successfully imported ${successCount} drug${successCount !== 1 ? 's' : ''} from CSV`,
+      });
+    } else {
+      toast({
+        title: 'Partial Import',
+        description: `${successCount} succeeded, ${failureCount} failed`,
+        variant: failureCount > successCount ? 'destructive' : 'default',
+      });
+    }
+
+    setActiveTab('drugs');
   };
 
   const stats = [
@@ -116,10 +162,16 @@ const AdminDashboard = () => {
             </Button>
           </div>
 
-          <Button variant="success" onClick={() => setShowAddModal(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add New Drug
-          </Button>
+          <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+            <Button variant="secondary" onClick={() => setShowCSVImportModal(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Import CSV
+            </Button>
+            <Button variant="success" onClick={() => setShowAddModal(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Drug
+            </Button>
+          </div>
         </div>
 
         {/* Search */}
@@ -281,6 +333,14 @@ const AdminDashboard = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* CSV Import Modal */}
+      <CSVImportModal
+        isOpen={showCSVImportModal}
+        onClose={() => setShowCSVImportModal(false)}
+        onImport={handleCSVImport}
+        isLoading={csvImporting}
+      />
     </PageTransition>
   );
 };
