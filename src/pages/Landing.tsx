@@ -7,26 +7,17 @@ import { PageTransition, StaggerContainer, StaggerItem } from '@/components/layo
 import { useNavigate } from 'react-router-dom';
 import { Waves } from '@/components/ui/waves-background';
 
-const DEPLOYER_ADDRESS = '0x2d4f73d89645c5558126cea3489c79f9498b5a66'; // Must match BlockchainContext
-
 const Landing = () => {
   const { connectWallet, isLoading, isConnected, role, error, account } = useBlockchain();
   const [showRoleSelect, setShowRoleSelect] = useState(false);
   const navigate = useNavigate();
 
-  // Check if current user is the deployer
-  const isDeployer = account?.toLowerCase() === DEPLOYER_ADDRESS.toLowerCase();
-
   // Show role selection after wallet is connected
   useEffect(() => {
     if (isConnected && account) {
-      // If deployer, always show role selection
-      // If not deployer, show selection only if they have a role
-      if (isDeployer || role !== null) {
-        setShowRoleSelect(true);
-      }
+      setShowRoleSelect(true);
     }
-  }, [isConnected, account, isDeployer, role]);
+  }, [isConnected, account]);
 
   const handleConnect = async () => {
     await connectWallet();
@@ -154,18 +145,18 @@ const Landing = () => {
                         {account}
                       </p>
                       
-                      {/* Deployer has access to both dashboards */}
-                      {isDeployer ? (
+                      {/* Show appropriate dashboard based on role */}
+                      {role === 'admin' ? (
                         <div>
                           <div className="rounded-lg bg-success/10 border border-success/20 p-4 mb-6">
                             <div className="flex items-center gap-2 mb-2">
                               <Shield className="w-5 h-5 text-success" />
                               <p className="text-success font-medium">
-                                Contract Deployer Detected
+                                Admin Role Detected
                               </p>
                             </div>
                             <p className="text-success/80 text-sm">
-                              As the contract deployer, you have full access to both Admin and Pharmacy dashboards.
+                              You have administrator privileges on this contract.
                             </p>
                           </div>
 
@@ -192,27 +183,6 @@ const Landing = () => {
                               <ChevronRight className="w-4 h-4 ml-auto group-hover:translate-x-1 transition-transform" />
                             </Button>
                           </div>
-                        </div>
-                      ) : role === 'admin' ? (
-                        <div>
-                          <div className="rounded-lg bg-primary/10 border border-primary/20 p-4 mb-4">
-                            <div className="flex items-center gap-2">
-                              <Shield className="w-5 h-5 text-primary" />
-                              <p className="text-primary font-medium">
-                                Admin Role Detected
-                              </p>
-                            </div>
-                          </div>
-                          <Button
-                            variant="default"
-                            size="lg"
-                            onClick={() => handleRoleSelect('admin')}
-                            className="w-full"
-                          >
-                            <Shield className="w-5 h-5 mr-2" />
-                            Go to Admin Dashboard
-                            <ChevronRight className="w-4 h-4 ml-auto" />
-                          </Button>
                         </div>
                       ) : role === 'pharmacy' ? (
                         <div>
@@ -244,7 +214,9 @@ const Landing = () => {
                             This wallet does not have admin or pharmacy staff permissions.
                             <br />
                             <br />
-                            Contact the contract administrator (deployer) to assign you a role using the <code className="bg-destructive/20 px-1 rounded">assignRole()</code> function.
+                            <strong>For admins:</strong> Contact the contract deployer to assign you an admin role.
+                            <br />
+                            <strong>For pharmacy staff:</strong> Ask an admin to assign you the pharmacy staff role using the <code className="bg-destructive/20 px-1 rounded">assignRole()</code> function.
                           </p>
                         </div>
                       )}

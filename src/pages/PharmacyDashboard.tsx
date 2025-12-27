@@ -20,8 +20,8 @@ const PharmacyDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Redirect if not pharmacy
-  if (role !== 'pharmacy') {
+  // Redirect if not pharmacy or admin
+  if (role !== 'pharmacy' && role !== 'admin') {
     navigate('/');
     return null;
   }

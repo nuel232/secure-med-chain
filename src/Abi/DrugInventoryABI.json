@@ -1,34 +1,49 @@
 [
 	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_name",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_quantity",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_expiryDate",
+				"type": "uint256"
+			}
+		],
+		"name": "addDrug",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_drugId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_quantity",
+				"type": "uint256"
+			}
+		],
+		"name": "dispenseDrug",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
 		"inputs": [],
 		"stateMutability": "nonpayable",
 		"type": "constructor"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "account",
-				"type": "address"
-			}
-		],
-		"name": "AdminAdded",
-		"type": "event"
-	},
-	{
-		"anonymous": false,
-		"inputs": [
-			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "account",
-				"type": "address"
-			}
-		],
-		"name": "AdminRemoved",
-		"type": "event"
 	},
 	{
 		"anonymous": false,
@@ -62,6 +77,12 @@
 				"internalType": "address",
 				"name": "addedBy",
 				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
 			}
 		],
 		"name": "DrugAdded",
@@ -73,13 +94,19 @@
 			{
 				"indexed": true,
 				"internalType": "uint256",
-				"name": "id",
+				"name": "drugId",
 				"type": "uint256"
 			},
 			{
 				"indexed": false,
+				"internalType": "string",
+				"name": "drugName",
+				"type": "string"
+			},
+			{
+				"indexed": false,
 				"internalType": "uint256",
-				"name": "amount",
+				"name": "quantity",
 				"type": "uint256"
 			},
 			{
@@ -91,7 +118,7 @@
 			{
 				"indexed": false,
 				"internalType": "uint256",
-				"name": "remainingQuantity",
+				"name": "timestamp",
 				"type": "uint256"
 			}
 		],
@@ -99,46 +126,65 @@
 		"type": "event"
 	},
 	{
-		"anonymous": false,
-		"inputs": [
+		"inputs": [],
+		"name": "deployer",
+		"outputs": [
 			{
-				"indexed": true,
 				"internalType": "address",
-				"name": "account",
+				"name": "",
 				"type": "address"
 			}
 		],
-		"name": "PharmacyStaffAdded",
-		"type": "event"
+		"stateMutability": "view",
+		"type": "function"
 	},
 	{
-		"anonymous": false,
-		"inputs": [
+		"inputs": [],
+		"name": "drugCount",
+		"outputs": [
 			{
-				"indexed": true,
-				"internalType": "address",
-				"name": "account",
-				"type": "address"
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
 			}
 		],
-		"name": "PharmacyStaffRemoved",
-		"type": "event"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "account",
-				"type": "address"
-			}
-		],
-		"name": "addAdmin",
-		"outputs": [],
-		"stateMutability": "nonpayable",
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
 		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "drugIds",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "drugs",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "id",
+				"type": "uint256"
+			},
 			{
 				"internalType": "string",
 				"name": "name",
@@ -153,77 +199,34 @@
 				"internalType": "uint256",
 				"name": "expiryDate",
 				"type": "uint256"
-			}
-		],
-		"name": "addDrug",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
+			},
 			{
 				"internalType": "address",
-				"name": "account",
+				"name": "addedBy",
 				"type": "address"
-			}
-		],
-		"name": "addPharmacyStaff",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "uint256",
-				"name": "drugId",
-				"type": "uint256"
 			},
 			{
 				"internalType": "uint256",
-				"name": "amount",
+				"name": "addedAt",
 				"type": "uint256"
+			},
+			{
+				"internalType": "bool",
+				"name": "exists",
+				"type": "bool"
 			}
 		],
-		"name": "dispenseDrug",
-		"outputs": [],
-		"stateMutability": "nonpayable",
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
 		"inputs": [],
-		"name": "getAllDrugs",
+		"name": "getAllDrugIds",
 		"outputs": [
 			{
 				"internalType": "uint256[]",
-				"name": "ids",
+				"name": "",
 				"type": "uint256[]"
-			},
-			{
-				"internalType": "string[]",
-				"name": "names",
-				"type": "string[]"
-			},
-			{
-				"internalType": "uint256[]",
-				"name": "quantities",
-				"type": "uint256[]"
-			},
-			{
-				"internalType": "uint256[]",
-				"name": "expiryDates",
-				"type": "uint256[]"
-			},
-			{
-				"internalType": "address[]",
-				"name": "addedBys",
-				"type": "address[]"
-			},
-			{
-				"internalType": "bool[]",
-				"name": "actives",
-				"type": "bool[]"
 			}
 		],
 		"stateMutability": "view",
@@ -233,7 +236,7 @@
 		"inputs": [
 			{
 				"internalType": "uint256",
-				"name": "drugId",
+				"name": "_drugId",
 				"type": "uint256"
 			}
 		],
@@ -265,9 +268,27 @@
 				"type": "address"
 			},
 			{
+				"internalType": "uint256",
+				"name": "addedAt",
+				"type": "uint256"
+			},
+			{
 				"internalType": "bool",
-				"name": "active",
+				"name": "isExpired",
 				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getTotalDrugs",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
 			}
 		],
 		"stateMutability": "view",
@@ -277,7 +298,7 @@
 		"inputs": [
 			{
 				"internalType": "address",
-				"name": "",
+				"name": "_address",
 				"type": "address"
 			}
 		],
@@ -295,12 +316,12 @@
 	{
 		"inputs": [
 			{
-				"internalType": "address",
-				"name": "",
-				"type": "address"
+				"internalType": "uint256",
+				"name": "_drugId",
+				"type": "uint256"
 			}
 		],
-		"name": "isPharmacyStaff",
+		"name": "isExpired",
 		"outputs": [
 			{
 				"internalType": "bool",
@@ -315,36 +336,16 @@
 		"inputs": [
 			{
 				"internalType": "address",
-				"name": "account",
+				"name": "_address",
 				"type": "address"
 			}
 		],
-		"name": "removeAdmin",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "account",
-				"type": "address"
-			}
-		],
-		"name": "removePharmacyStaff",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"name": "totalDrugs",
+		"name": "isPharmacyStaff",
 		"outputs": [
 			{
-				"internalType": "uint256",
+				"internalType": "bool",
 				"name": "",
-				"type": "uint256"
+				"type": "bool"
 			}
 		],
 		"stateMutability": "view",

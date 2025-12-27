@@ -5,15 +5,12 @@ pragma solidity ^0.8.19;
  * @title DrugInventory
  * @notice Blockchain-based drug inventory management for hospitals
  * @dev Final Year Academic Project - Demonstrates immutable record keeping
+ * @dev Simplified Role System: Only deployer is admin, all others are pharmacy staff
  */
 contract DrugInventory {
     // ============ State Variables ============
 
-    address public admin;
-    
-    // Role definitions
-    enum Role { None, Admin, Pharmacy }
-    mapping(address => Role) public roles;
+    address public deployer;
     
     // Drug structure
     struct Drug {
@@ -50,21 +47,21 @@ contract DrugInventory {
         uint256 timestamp
     );
     
-    event RoleAssigned(
-        address indexed user,
-        Role role,
-        address indexed assignedBy
-    );
-    
     // ============ Modifiers ============
     
     modifier onlyAdmin() {
-        require(roles[msg.sender] == Role.Admin, "Only admin can perform this action");
+        require(msg.sender == deployer, "Only admin (deployer) can perform this action");
         _;
     }
     
-    modifier onlyPharmacy() {
-        require(roles[msg.sender] == Role.Pharmacy, "Only pharmacy staff can perform this action");
+    modifier onlyPharmacyStaff() {
+        require(msg.sender != deployer, "Admin cannot perform this action");
+        _;
+    }
+    
+    modifier onlyPharmacyOrAdmin() {
+        // Allow both admin (deployer) and pharmacy staff
+        // This is a permissive modifier that allows everyone
         _;
     }
     
@@ -76,26 +73,13 @@ contract DrugInventory {
     // ============ Constructor ============
     
     constructor() {
-        admin = msg.sender;
-        roles[msg.sender] = Role.Admin;
-        emit RoleAssigned(msg.sender, Role.Admin, msg.sender);
+        deployer = msg.sender;
     }
     
     // ============ Admin Functions ============
     
     /**
-     * @notice Assign a role to a user
-     * @param _user Address of the user
-     * @param _role Role to assign (1 = Admin, 2 = Pharmacy)
-     */
-    function assignRole(address _user, Role _role) external onlyAdmin {
-        require(_user != address(0), "Invalid address");
-        roles[_user] = _role;
-        emit RoleAssigned(_user, _role, msg.sender);
-    }
-    
-    /**
-     * @notice Add a new drug batch to inventory
+     * @notice Add a new drug batch to inventory (Admin only)
      * @param _name Name of the drug
      * @param _quantity Initial quantity
      * @param _expiryDate Expiry date as Unix timestamp
@@ -137,14 +121,14 @@ contract DrugInventory {
     // ============ Pharmacy Functions ============
     
     /**
-     * @notice Dispense drugs from inventory
+     * @notice Dispense drugs from inventory (Admin and Pharmacy staff)
      * @param _drugId ID of the drug to dispense
      * @param _quantity Quantity to dispense
      */
     function dispenseDrug(
         uint256 _drugId,
         uint256 _quantity
-    ) external onlyPharmacy drugExists(_drugId) {
+    ) external onlyPharmacyOrAdmin drugExists(_drugId) {
         Drug storage drug = drugs[_drugId];
         
         require(drug.expiryDate > block.timestamp, "Cannot dispense expired drugs");
@@ -213,10 +197,18 @@ contract DrugInventory {
     }
     
     /**
-     * @notice Get user's role
-     * @param _user Address to check
+     * @notice Check if an address is the admin (deployer)
+     * @param _address Address to check
      */
-    function getRole(address _user) external view returns (Role) {
-        return roles[_user];
+    function isAdmin(address _address) external view returns (bool) {
+        return _address == deployer;
+    }
+    
+    /**
+     * @notice Check if an address is pharmacy staff
+     * @param _address Address to check
+     */
+    function isPharmacyStaff(address _address) external view returns (bool) {
+        return _address != deployer;
     }
 }
