@@ -6,7 +6,7 @@ import { BlockchainContext, type BlockchainContextType, type UserRole, type Drug
 // ============================================
 // CONFIGURATION - ONLY THING TO CHANGE
 // ============================================
-const CONTRACT_ADDRESS = '0x606C3b4e45EA9a4f11f58676A6D57609faE9035f'; // Update this after deployment
+const CONTRACT_ADDRESS =   '0x8A40C34Ae63acAcFe94eE6e2269D5130012B65Ea '; //'0x606C3b4e45EA9a4f11f58676A6D57609faE9035f'; // Update this after deployment
 
 // ============================================
 // TYPE DEFINITIONS
@@ -118,33 +118,27 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
    * Determine user role from blockchain
    * Smart contract handles all authorization logic
    */
-  const determineRole = useCallback(async (
-    address: string,
-    providerInstance: ethers.BrowserProvider
-  ): Promise<UserRole> => {
+  const determineRole = useCallback(async (address, providerInstance) => {
     try {
-      console.log('🔍 Checking role for:', address);
-      
-      // Query smart contract for user's role
       const isAdminRole = await drugService.isAdmin(providerInstance, address);
-      if (isAdminRole) {
-        console.log('✅ User is Admin');
-        return 'admin';
-      }
-
-      const isPharmacyRole = await drugService.isPharmacyStaff(providerInstance, address);
-      if (isPharmacyRole) {
-        console.log('✅ User is Pharmacy Staff');
+      if (isAdminRole) return 'admin';
+  
+      // Your contract makes everyone else pharmacy staff automatically
+      // Fall back to pharmacy if the check fails but connection works
+      try {
+        const isPharmacyRole = await drugService.isPharmacyStaff(providerInstance, address);
+        if (isPharmacyRole) return 'pharmacy';
+      } catch {
+        // If isPharmacyStaff call fails but isAdmin succeeded, default to pharmacy
         return 'pharmacy';
       }
-
-      console.log('⚠️ No role assigned');
-      return null;
+  
+      return 'pharmacy'; // default — anyone who isn't admin is pharmacy
     } catch (err) {
-      console.error('❌ Error determining role:', err);
-      return null;
+      return null; // genuine connection failure
     }
   }, []);
+  
 
   /**
    * Connect to MetaMask wallet

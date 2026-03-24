@@ -211,7 +211,10 @@ const Landing = () => {
                             ⚠️ No Role Assigned
                           </p>
                           <p className="text-destructive/80 text-xs">
-                            This wallet does not have admin or pharmacy staff permissions.
+                              This wallet does not have the admin (deployer) address.
+  All non-deployer wallets automatically have pharmacy staff access.
+  If you are seeing this, the contract connection is failing — 
+  check your network is Sepolia and the contract address is correct.
                             <br />
                             <br />
                             <strong>For admins:</strong> Contact the contract deployer to assign you an admin role.

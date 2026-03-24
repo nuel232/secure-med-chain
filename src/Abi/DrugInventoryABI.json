@@ -274,7 +274,7 @@
 			},
 			{
 				"internalType": "bool",
-				"name": "isExpired",
+				"name": "Expired",
 				"type": "bool"
 			}
 		],
