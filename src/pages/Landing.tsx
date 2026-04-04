@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { Waves } from '@/components/ui/waves-background';
 
 const Landing = () => {
-  const { connectWallet, isLoading, isConnected, role, error, account } = useBlockchain();
+  const { connectWallet, isLoading, isRoleLoading, isConnected, role, error, account } = useBlockchain();
   const [showRoleSelect, setShowRoleSelect] = useState(false);
   const navigate = useNavigate();
 
@@ -145,8 +145,14 @@ const Landing = () => {
                         {account}
                       </p>
                       
-                      {/* Show appropriate dashboard based on role */}
-                      {role === 'admin' ? (
+                      {/* Wait for role check before rendering role-specific actions */}
+                      {isRoleLoading ? (
+                        <div className="rounded-lg bg-muted border border-border p-4">
+                          <p className="text-sm text-muted-foreground">
+                            Checking role permissions on blockchain...
+                          </p>
+                        </div>
+                      ) : role === 'admin' ? (
                         <div>
                           <div className="rounded-lg bg-success/10 border border-success/20 p-4 mb-6">
                             <div className="flex items-center gap-2 mb-2">
@@ -205,7 +211,7 @@ const Landing = () => {
                             <ChevronRight className="w-4 h-4 ml-auto" />
                           </Button>
                         </div>
-                      ) : (
+                      ) : role === null ? (
                         <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4">
                           <p className="text-destructive text-sm font-medium mb-2">
                             ⚠️ No Role Assigned
@@ -222,7 +228,7 @@ const Landing = () => {
                             <strong>For pharmacy staff:</strong> Ask an admin to assign you the pharmacy staff role using the <code className="bg-destructive/20 px-1 rounded">assignRole()</code> function.
                           </p>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </motion.div>
                 ) : null}

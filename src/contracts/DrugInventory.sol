@@ -84,11 +84,11 @@ contract DrugInventory {
      * @param _quantity Initial quantity
      * @param _expiryDate Expiry date as Unix timestamp
      */
-    function addDrug(
+    function _addDrug(
         string memory _name,
         uint256 _quantity,
         uint256 _expiryDate
-    ) external onlyAdmin {
+    ) internal {
         require(bytes(_name).length > 0, "Drug name cannot be empty");
         require(_quantity > 0, "Quantity must be greater than 0");
         require(_expiryDate > block.timestamp, "Expiry date must be in the future");
@@ -116,6 +116,39 @@ contract DrugInventory {
             msg.sender,
             block.timestamp
         );
+    }
+
+    function addDrug(
+        string memory _name,
+        uint256 _quantity,
+        uint256 _expiryDate
+    ) external onlyAdmin {
+        _addDrug(_name, _quantity, _expiryDate);
+    }
+
+    /**
+     * @notice Add many drugs in one transaction (Admin only)
+     * @param names Drug names
+     * @param quantities Drug quantities
+     * @param expiryDates Expiry timestamps (unix seconds)
+     */
+    function addDrugsBatch(
+        string[] calldata names,
+        uint256[] calldata quantities,
+        uint256[] calldata expiryDates
+    ) external onlyAdmin {
+        require(
+            names.length == quantities.length && names.length == expiryDates.length,
+            "Length mismatch"
+        );
+        require(names.length > 0, "Empty batch");
+
+        for (uint256 i = 0; i < names.length; ) {
+            _addDrug(names[i], quantities[i], expiryDates[i]);
+            unchecked {
+                ++i;
+            }
+        }
     }
     
     // ============ Pharmacy Functions ============
@@ -159,7 +192,7 @@ contract DrugInventory {
         uint256 expiryDate,
         address addedBy,
         uint256 addedAt,
-        bool isExpired
+        bool expired
     ) {
         Drug storage drug = drugs[_drugId];
         return (

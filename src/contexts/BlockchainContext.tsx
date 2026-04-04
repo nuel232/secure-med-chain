@@ -6,7 +6,8 @@ import { BlockchainContext, type BlockchainContextType, type UserRole, type Drug
 // ============================================
 // CONFIGURATION - ONLY THING TO CHANGE
 // ============================================
-const CONTRACT_ADDRESS =   '0x8A40C34Ae63acAcFe94eE6e2269D5130012B65Ea '; //'0x606C3b4e45EA9a4f11f58676A6D57609faE9035f'; // Update this after deployment
+const CONTRACT_ADDRESS = '0x4BCD044F75A910999E448431C6F9C7A83c68B243'; // <-- trailing space removed!
+const SUPPORTED_CHAIN_IDS = [11155111n, 31337n];
 
 // ============================================
 // TYPE DEFINITIONS
@@ -69,6 +70,7 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isConnected, setIsConnected] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
   const [role, setRole] = useState<UserRole>(null);
+  const [isRoleLoading, setIsRoleLoading] = useState(false);
   const [drugs, setDrugs] = useState<Drug[]>([]);
   const [transactionLogs, setTransactionLogs] = useState<TransactionLog[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -145,6 +147,7 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
    */
   const connectWallet = useCallback(async () => {
     setIsLoading(true);
+    setIsRoleLoading(true);
     setError(null);
 
     try {
@@ -176,14 +179,31 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const network = await providerInstance.getNetwork();
       console.log('🌐 Network:', network.name, 'Chain ID:', network.chainId);
 
+      // Fail early if user is on an unexpected network.
+      if (!SUPPORTED_CHAIN_IDS.includes(network.chainId)) {
+        throw new Error(
+          `Wrong network selected (chain ${network.chainId}). Switch MetaMask to Sepolia (11155111) or Localhost 8545 (31337).`,
+        );
+      }
+
+      // Validate that contract exists on selected network before making calls.
+      const deployed = await drugService.isContractDeployed(providerInstance);
+      if (!deployed) {
+        throw new Error(
+          `No contract found at ${CONTRACT_ADDRESS} on chain ${network.chainId}. Deploy contract to this network or update CONTRACT_ADDRESS.`,
+        );
+      }
+
       setProvider(providerInstance);
       setSigner(signerInstance);
       setAccount(userAccount);
       setIsConnected(true);
 
       // Determine user role from blockchain
+      setRole(null);
       const userRole = await determineRole(userAccount, providerInstance);
       setRole(userRole);
+      setIsRoleLoading(false);
 
       // Load drugs from blockchain
       await loadDrugs(providerInstance);
@@ -196,6 +216,7 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setIsConnected(false);
           setAccount(null);
           setRole(null);
+          setIsRoleLoading(false);
           setProvider(null);
           setSigner(null);
           setDrugs([]);
@@ -205,8 +226,11 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const newAccount = accountsArray[0];
           console.log('🔄 Account changed to:', newAccount);
           setAccount(newAccount);
+          setIsRoleLoading(true);
+          setRole(null);
           const newRole = await determineRole(newAccount, providerInstance);
           setRole(newRole);
+          setIsRoleLoading(false);
           await loadDrugs(providerInstance);
         }
       };
@@ -224,7 +248,9 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       console.error('❌ Wallet connection error:', error);
       setError(error.message || 'Failed to connect wallet');
       setIsConnected(false);
+      setRole(null);
     } finally {
+      setIsRoleLoading(false);
       setIsLoading(false);
     }
   }, [determineRole, loadDrugs]);
@@ -248,6 +274,7 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setIsConnected(false);
     setAccount(null);
     setRole(null);
+    setIsRoleLoading(false);
     setProvider(null);
     setSigner(null);
     setDrugs([]);
@@ -314,6 +341,11 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (error.message) {
         if (error.message.includes('Only admin')) {
           errorMessage = 'Only admins can add drugs';
+        } else if (
+          error.message.includes('not been authorized by the user') ||
+          error.message.includes('"code": 4100')
+        ) {
+          errorMessage = 'Wallet not authorized. Reconnect MetaMask and approve account access.';
         } else if (error.message.includes('user rejected') || error.code === 'ACTION_REJECTED') {
           errorMessage = 'Transaction was rejected';
         } else {
@@ -327,6 +359,83 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsLoading(false);
     }
   }, [signer, account, provider, drugs.length, transactionLogs.length, loadDrugs]);
+
+  /**
+   * CSV / batch import: one on-chain transaction for many drugs (requires addDrugsBatch on contract).
+   */
+  const importDrugsBatch = useCallback(async (
+    rows: { name: string; quantity: number; expiryDate: Date }[],
+  ): Promise<boolean> => {
+    if (!signer) {
+      setError('Wallet not connected');
+      return false;
+    }
+    if (rows.length === 0) {
+      setError('No drugs to import');
+      return false;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const items = rows.map((r) => ({
+        name: r.name,
+        quantity: r.quantity,
+        expiryTimestamp: Math.floor(r.expiryDate.getTime() / 1000),
+      }));
+
+      const receipt = await drugService.addDrugsBatch(signer, items);
+      const txHash = receipt?.hash ?? '';
+
+      if (provider) {
+        await loadDrugs(provider);
+      }
+
+      const newLog: TransactionLog = {
+        id: String(transactionLogs.length + 1),
+        type: 'BATCH_IMPORT',
+        drugId: 0,
+        drugName: `CSV import (${rows.length} drugs)`,
+        quantity: rows.length,
+        performer: account!,
+        timestamp: Date.now(),
+        txHash,
+      };
+      setTransactionLogs((prev) => [newLog, ...prev]);
+
+      return true;
+    } catch (err) {
+      const error = err as Error & { message?: string; code?: string };
+      console.error('❌ Error batch importing drugs:', error);
+
+      let errorMessage = 'Batch import failed';
+      const msg = error.message ?? '';
+      if (msg.includes('Only admin')) {
+        errorMessage = 'Only admins can import drugs';
+      } else if (
+        msg.includes('not been authorized by the user') ||
+        msg.includes('"code": 4100')
+      ) {
+        errorMessage = 'Wallet not authorized. Reconnect MetaMask and approve account access.';
+      } else if (msg.includes('user rejected') || error.code === 'ACTION_REJECTED') {
+        errorMessage = 'Transaction was rejected';
+      } else if (
+        msg.toLowerCase().includes('execution reverted') ||
+        msg.includes('missing revert data')
+      ) {
+        errorMessage =
+          'Batch import failed on-chain. Ensure the contract implements addDrugsBatch and redeploy (see contracts/DrugInventory-addDrugsBatch.snippet.sol).';
+      } else {
+        errorMessage = msg || errorMessage;
+      }
+
+      setError(errorMessage);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [signer, account, provider, transactionLogs.length, loadDrugs]);
 
   /**
    * Dispense drug from inventory
@@ -422,6 +531,7 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isConnected,
         account,
         role,
+        isRoleLoading,
         drugs,
         transactionLogs,
         isLoading,
@@ -429,6 +539,7 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         connectWallet,
         disconnectWallet,
         addDrug,
+        importDrugsBatch,
         dispenseDrug,
         setRole: setRoleManually,
       }}
