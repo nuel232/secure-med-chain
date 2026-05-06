@@ -1,12 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
-import { Plus, Package, History, Search, X, Calendar, Upload } from 'lucide-react';
+import { Plus, Package, History, Search, X, Calendar, Upload, BarChart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Header } from '@/components/shared/Header';
 import { DrugCard } from '@/components/shared/DrugCard';
 import { TransactionLogCard } from '@/components/shared/TransactionLog';
+import AnalyticsDashboard from '@/components/shared/AnalyticsDashboard';
 import { PageTransition, StaggerContainer, StaggerItem } from '@/components/layout/PageTransition';
 import { useBlockchain } from '@/hooks/useBlockchain';
 import { useNavigate } from 'react-router-dom';
@@ -14,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CSVImportModal } from '@/components/CSVImportModal';
 import { DrugImportRow } from '@/utils/csvParser';
 
-type Tab = 'drugs' | 'logs' | 'add';
+type Tab = 'drugs' | 'logs' | 'analytics' | 'add';
 
 const AdminDashboard = () => {
   const { drugs, transactionLogs, addDrug, isLoading, role } = useBlockchain();
@@ -170,6 +171,13 @@ const AdminDashboard = () => {
               <History className="h-4 w-4 mr-2" />
               Transaction Logs
             </Button>
+            <Button
+              variant={activeTab === 'analytics' ? 'default' : 'secondary'}
+              onClick={() => setActiveTab('analytics')}
+            >
+              <BarChart className="h-4 w-4 mr-2" />
+              Analytics
+            </Button>
           </div>
 
           <div className="flex gap-2 flex-wrap sm:flex-nowrap">
@@ -247,6 +255,17 @@ const AdminDashboard = () => {
                   <p className="text-muted-foreground">No transactions yet</p>
                 </div>
               )}
+            </motion.div>
+          )}
+          {activeTab === 'analytics' && (
+            <motion.div
+              key="analytics"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="max-w-4xl mx-auto"
+            >
+              <AnalyticsDashboard drugs={drugs} transactionLogs={transactionLogs} />
             </motion.div>
           )}
         </AnimatePresence>
