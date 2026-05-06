@@ -6,13 +6,12 @@ import { BlockchainContext, type BlockchainContextType, type UserRole, type Drug
 // ============================================
 // CONFIGURATION - ONLY THING TO CHANGE
 // ============================================
-const CONTRACT_ADDRESS = '0x4BCD044F75A910999E448431C6F9C7A83c68B243'; // <-- trailing space removed!
+const CONTRACT_ADDRESS = '0x4BCD044F75A910999E448431C6F9C7A83c68B243'; 
 const SUPPORTED_CHAIN_IDS = [11155111n, 31337n];
 
 // ============================================
 // TYPE DEFINITIONS
-// ============================================
-
+// ===========================================
 interface MetaMaskEthereum {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   on: (eventName: string, handler: (...args: unknown[]) => void) => void;
@@ -205,8 +204,29 @@ export const BlockchainProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setRole(userRole);
       setIsRoleLoading(false);
 
+
       // Load drugs from blockchain
       await loadDrugs(providerInstance);
+
+      // Load audit logs from blockchain
+      try {
+        const logs = await drugService.fetchAuditLogs(providerInstance);
+        // Map logs to TransactionLog type for UI
+        const mappedLogs = logs.map((log, idx) => ({
+          id: String(idx + 1),
+          type: log.action === 'ADD' ? 'ADD_DRUG' as const : 'DISPENSE_DRUG' as const,
+          drugId: log.drugId,
+          drugName: log.name,
+          quantity: log.quantity,
+          performer: log.by,
+          timestamp: log.timestamp,
+          txHash: log.txHash,
+        }));
+        setTransactionLogs(mappedLogs);
+      } catch (e) {
+        console.error('❌ Error loading audit logs:', e);
+        setTransactionLogs([]);
+      }
 
       // Listen for account changes
       const handleAccountsChanged = async (newAccounts: unknown) => {

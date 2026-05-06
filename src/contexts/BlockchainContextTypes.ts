@@ -23,6 +23,7 @@ export interface TransactionLog {
     quantity: number;
     expiryDate: number; // Unix timestamp (ms)
   }>;
+  action?: 'ADD' | 'DISPENSE'; // for audit logs
 }
 
 export type UserRole = 'admin' | 'pharmacy' | null;

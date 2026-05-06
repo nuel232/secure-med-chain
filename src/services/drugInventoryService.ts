@@ -1,3 +1,58 @@
+/**
+ * Fetch all audit logs (DrugAdded, DrugDispensed events) from the blockchain
+ * Returns: [{ action, drugId, name, quantity, by, txHash, timestamp }]
+ */
+export async function fetchAuditLogs(provider) {
+  const contract = getContract(provider);
+  const iface = contract.interface;
+  const logs = [];
+
+  // DrugAdded events
+  const addedEvents = await contract.queryFilter(contract.filters.DrugAdded());
+  // DrugDispensed events
+  const dispensedEvents = await contract.queryFilter(contract.filters.DrugDispensed());
+
+  // Helper to get block timestamp
+  async function getTimestamp(blockNumber) {
+    const block = await provider.getBlock(blockNumber);
+    return block.timestamp * 1000;
+  }
+
+
+  // Parse DrugAdded
+  for (const event of addedEvents) {
+    // ethers v6: decode event args manually
+    const decoded = iface.decodeEventLog("DrugAdded", event.data, event.topics);
+    logs.push({
+      action: 'ADD',
+      drugId: Number(decoded.id),
+      name: decoded.name,
+      quantity: Number(decoded.quantity),
+      expiryDate: Number(decoded.expiryDate),
+      by: decoded.addedBy,
+      txHash: event.transactionHash,
+      timestamp: await getTimestamp(event.blockNumber),
+    });
+  }
+
+  // Parse DrugDispensed
+  for (const event of dispensedEvents) {
+    const decoded = iface.decodeEventLog("DrugDispensed", event.data, event.topics);
+    logs.push({
+      action: 'DISPENSE',
+      drugId: Number(decoded.drugId),
+      name: decoded.drugName,
+      quantity: Number(decoded.quantity),
+      by: decoded.dispensedBy,
+      txHash: event.transactionHash,
+      timestamp: await getTimestamp(event.blockNumber),
+    });
+  }
+
+  // Sort logs by timestamp descending
+  logs.sort((a, b) => b.timestamp - a.timestamp);
+  return logs;
+}
 import { ethers } from "ethers";
 import DrugInventoryABI from "@/Abi/DrugInventoryABI.json";
 
@@ -62,19 +117,24 @@ export async function getAllDrugs(provider) {
 
     console.log("📦 Fetching details for", drugIds.length, "drugs...");
 
-    for (const drugId of drugIds) {
-      try {
-        const drug = await contract.getDrug(drugId);
+
+    // Fetch all drugs in parallel for speed
+    const drugPromises = drugIds.map((drugId) => contract.getDrug(drugId));
+    const drugResults = await Promise.allSettled(drugPromises);
+
+    drugResults.forEach((result, idx) => {
+      if (result.status === "fulfilled") {
+        const drug = result.value;
         ids.push(Number(drug.id));
         names.push(drug.name);
         quantities.push(Number(drug.quantity));
         expiryDates.push(Number(drug.expiryDate));
         addedBys.push(drug.addedBy);
         timestamps.push(Date.now());
-      } catch (err) {
-        console.error(`Error fetching drug ${drugId}:`, err);
+      } else {
+        console.error(`Error fetching drug ${drugIds[idx]}:`, result.reason);
       }
-    }
+    });
 
     console.log("✅ Fetched all drug details");
     return [ids, names, quantities, expiryDates, addedBys, timestamps];
