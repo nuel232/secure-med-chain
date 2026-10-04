@@ -1,321 +1,284 @@
-/**
- * Fetch all audit logs (DrugAdded, DrugDispensed events) from the blockchain
- * Returns: [{ action, drugId, name, quantity, by, txHash, timestamp }]
- */
-export async function fetchAuditLogs(provider) {
-  const contract = getContract(provider);
-  const iface = contract.interface;
-  const logs = [];
+import { ethers } from 'ethers';
+import DrugInventoryABI from '@/Abi/DrugInventoryABI.json';
+import { CONTRACT_ADDRESS, CONTRACT_CONFIGURED, DEPLOY_BLOCK } from '@/config';
+import type { Drug, NewDrugInput } from '@/contexts/BlockchainContextTypes';
+import { expiryToTimestamp } from '@/utils/dates';
 
-  // DrugAdded events
-  const addedEvents = await contract.queryFilter(contract.filters.DrugAdded());
-  // DrugDispensed events
-  const dispensedEvents = await contract.queryFilter(contract.filters.DrugDispensed());
+type Runner = ethers.Provider | ethers.Signer;
 
-  // Helper to get block timestamp
-  async function getTimestamp(blockNumber) {
-    const block = await provider.getBlock(blockNumber);
-    return block.timestamp * 1000;
-  }
-
-
-  // Parse DrugAdded
-  for (const event of addedEvents) {
-    // ethers v6: decode event args manually
-    const decoded = iface.decodeEventLog("DrugAdded", event.data, event.topics);
-    logs.push({
-      action: 'ADD',
-      drugId: Number(decoded.id),
-      name: decoded.name,
-      quantity: Number(decoded.quantity),
-      expiryDate: Number(decoded.expiryDate),
-      by: decoded.addedBy,
-      txHash: event.transactionHash,
-      timestamp: await getTimestamp(event.blockNumber),
-    });
-  }
-
-  // Parse DrugDispensed
-  for (const event of dispensedEvents) {
-    const decoded = iface.decodeEventLog("DrugDispensed", event.data, event.topics);
-    logs.push({
-      action: 'DISPENSE',
-      drugId: Number(decoded.drugId),
-      name: decoded.drugName,
-      quantity: Number(decoded.quantity),
-      by: decoded.dispensedBy,
-      txHash: event.transactionHash,
-      timestamp: await getTimestamp(event.blockNumber),
-    });
-  }
-
-  // Sort logs by timestamp descending
-  logs.sort((a, b) => b.timestamp - a.timestamp);
-  return logs;
-}
-import { ethers } from "ethers";
-import DrugInventoryABI from "@/Abi/DrugInventoryABI.json";
-
-const CONTRACT_ADDRESS = '0x4BCD044F75A910999E448431C6F9C7A83c68B243'; // <-- trailing space removed!
+/** Matches MAX_BATCH_SIZE in the contract. */
+const MAX_BATCH_SIZE = 100;
+const PAGE_SIZE = 100;
 
 export function getContractAddress(): string {
   return CONTRACT_ADDRESS;
 }
 
-export async function isContractDeployed(provider: ethers.BrowserProvider): Promise<boolean> {
+function getContract(runner: Runner) {
+  if (!CONTRACT_CONFIGURED) {
+    throw new Error(
+      'VITE_CONTRACT_ADDRESS is not set. Copy .env.example to .env and set the deployed contract address.',
+    );
+  }
+  return new ethers.Contract(CONTRACT_ADDRESS, DrugInventoryABI, runner);
+}
+
+function providerOf(signer: ethers.Signer): ethers.Provider {
+  if (!signer.provider) throw new Error('Signer provider is unavailable');
+  return signer.provider;
+}
+
+export async function isContractDeployed(provider: ethers.Provider): Promise<boolean> {
+  if (!CONTRACT_CONFIGURED) return false;
   const code = await provider.getCode(CONTRACT_ADDRESS);
-  return code !== "0x";
+  return code !== '0x';
 }
 
-function isBadDecodeError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.message.includes("could not decode result data");
+async function ensureDeployed(provider: ethers.Provider) {
+  if (!(await isContractDeployed(provider))) {
+    throw new Error(`No contract deployed at ${CONTRACT_ADDRESS} on the current network`);
+  }
 }
 
+// ============ Reads (these THROW on failure; callers decide how to surface it) ============
+
+export interface RoleInfo {
+  isAdmin: boolean;
+  isStaff: boolean;
+  isPendingAdmin: boolean;
+}
+
+export async function getRoleInfo(provider: ethers.Provider, address: string): Promise<RoleInfo> {
+  const c = getContract(provider);
+  const [isAdmin, isStaff, pending] = await Promise.all([
+    c.isAdmin(address) as Promise<boolean>,
+    c.isPharmacyStaff(address) as Promise<boolean>,
+    c.pendingAdmin() as Promise<string>,
+  ]);
+  return {
+    isAdmin,
+    isStaff,
+    isPendingAdmin: pending !== ethers.ZeroAddress && pending.toLowerCase() === address.toLowerCase(),
+  };
+}
+
+export async function getAllDrugs(provider: ethers.Provider): Promise<Drug[]> {
+  const c = getContract(provider);
+  const total = Number(await c.getTotalDrugs());
+  const drugs: Drug[] = [];
+
+  for (let offset = 0; offset < total; offset += PAGE_SIZE) {
+    const page = await c.getDrugs(offset, PAGE_SIZE);
+    for (const d of page) {
+      drugs.push({
+        id: Number(d.id),
+        name: d.name,
+        batchNumber: d.batchNumber,
+        registrationNumber: d.registrationNumber,
+        quantity: Number(d.quantity),
+        expiryDate: Number(d.expiryDate) * 1000,
+        addedBy: d.addedBy,
+        timestamp: Number(d.addedAt) * 1000,
+      });
+    }
+  }
+  return drugs;
+}
+
+export type AuditAction =
+  | 'ADD'
+  | 'DISPENSE'
+  | 'ADJUST'
+  | 'WRITE_OFF'
+  | 'STAFF_GRANTED'
+  | 'STAFF_REVOKED';
+
+export interface AuditLog {
+  action: AuditAction;
+  drugId: number;
+  name: string;
+  batchNumber?: string;
+  quantity: number;
+  expiryDate?: number; // ms
+  reason?: string;
+  by: string;
+  txHash: string;
+  timestamp: number; // ms
+  blockNumber: number;
+  logIndex: number;
+}
 
 /**
- * Get contract instance
+ * Rebuild the full audit trail from contract events.
+ * Most events carry their own `timestamp`; only the staff events need a block lookup.
  */
-function getContract(providerOrSigner: ethers.BrowserProvider | ethers.Signer) {
-  return new ethers.Contract(
-    CONTRACT_ADDRESS,
-    DrugInventoryABI,
-    providerOrSigner,
+export async function fetchAuditLogs(provider: ethers.Provider): Promise<AuditLog[]> {
+  const c = getContract(provider);
+  const q = (name: string) => c.queryFilter(c.filters[name](), DEPLOY_BLOCK);
+
+  const [added, dispensed, adjusted, writtenOff, granted, revoked] = await Promise.all([
+    q('DrugAdded'),
+    q('DrugDispensed'),
+    q('QuantityAdjusted'),
+    q('DrugWrittenOff'),
+    q('StaffGranted'),
+    q('StaffRevoked'),
+  ]);
+
+  const blockTimes = new Map<number, number>();
+  const blockTime = async (n: number) => {
+    if (!blockTimes.has(n)) {
+      const b = await provider.getBlock(n);
+      blockTimes.set(n, (b?.timestamp ?? 0) * 1000);
+    }
+    return blockTimes.get(n)!;
+  };
+
+  const base = (e: ethers.EventLog | ethers.Log) => ({
+    txHash: e.transactionHash,
+    blockNumber: e.blockNumber,
+    logIndex: e.index,
+  });
+  const logs: AuditLog[] = [];
+
+  for (const e of added as ethers.EventLog[]) {
+    const a = e.args;
+    logs.push({
+      ...base(e),
+      action: 'ADD',
+      drugId: Number(a.id),
+      name: a.name,
+      batchNumber: a.batchNumber,
+      quantity: Number(a.quantity),
+      expiryDate: Number(a.expiryDate) * 1000,
+      by: a.addedBy,
+      timestamp: Number(a.timestamp) * 1000,
+    });
+  }
+  for (const e of dispensed as ethers.EventLog[]) {
+    const a = e.args;
+    logs.push({
+      ...base(e),
+      action: 'DISPENSE',
+      drugId: Number(a.drugId),
+      name: a.drugName,
+      quantity: Number(a.quantity),
+      reason: a.reason,
+      by: a.dispensedBy,
+      timestamp: Number(a.timestamp) * 1000,
+    });
+  }
+  for (const e of adjusted as ethers.EventLog[]) {
+    const a = e.args;
+    logs.push({
+      ...base(e),
+      action: 'ADJUST',
+      drugId: Number(a.drugId),
+      name: a.drugName,
+      quantity: Number(a.newQuantity),
+      reason: `${a.reason} (${a.oldQuantity} → ${a.newQuantity})`,
+      by: a.adjustedBy,
+      timestamp: Number(a.timestamp) * 1000,
+    });
+  }
+  for (const e of writtenOff as ethers.EventLog[]) {
+    const a = e.args;
+    logs.push({
+      ...base(e),
+      action: 'WRITE_OFF',
+      drugId: Number(a.drugId),
+      name: a.drugName,
+      quantity: Number(a.quantity),
+      reason: 'Expired stock written off',
+      by: a.writtenOffBy,
+      timestamp: Number(a.timestamp) * 1000,
+    });
+  }
+  for (const [events, action] of [
+    [granted, 'STAFF_GRANTED'],
+    [revoked, 'STAFF_REVOKED'],
+  ] as const) {
+    for (const e of events as ethers.EventLog[]) {
+      logs.push({
+        ...base(e),
+        action,
+        drugId: 0,
+        name: e.args.staff,
+        quantity: 0,
+        by: e.args.by,
+        timestamp: await blockTime(e.blockNumber),
+      });
+    }
+  }
+
+  logs.sort((x, y) => y.blockNumber - x.blockNumber || y.logIndex - x.logIndex);
+  return logs;
+}
+
+/** Currently authorized staff: addresses ever granted, filtered by the contract's live state. */
+export async function getStaffList(provider: ethers.Provider): Promise<string[]> {
+  const c = getContract(provider);
+  const granted = (await c.queryFilter(c.filters.StaffGranted(), DEPLOY_BLOCK)) as ethers.EventLog[];
+  const unique = [...new Set(granted.map((e) => ethers.getAddress(e.args.staff)))];
+  const live = await Promise.all(unique.map((a) => c.authorizedStaff(a) as Promise<boolean>));
+  return unique.filter((_, i) => live[i]);
+}
+
+// ============ Writes (admin / staff). Each returns the mined receipt. ============
+
+async function send(
+  signer: ethers.Signer,
+  call: (c: ethers.Contract) => Promise<ethers.ContractTransactionResponse>,
+) {
+  await ensureDeployed(providerOf(signer));
+  const tx = await call(getContract(signer));
+  const receipt = await tx.wait();
+  if (!receipt || receipt.status !== 1) throw new Error('Transaction failed');
+  return receipt;
+}
+
+const toTuple = (d: NewDrugInput) => ({
+  name: d.name,
+  batchNumber: d.batchNumber,
+  registrationNumber: d.registrationNumber,
+  quantity: BigInt(d.quantity),
+  expiryDate: BigInt(expiryToTimestamp(d.expiryDate)),
+});
+
+export function addDrug(signer: ethers.Signer, d: NewDrugInput) {
+  const t = toTuple(d);
+  return send(signer, (c) =>
+    c.addDrug(t.name, t.batchNumber, t.registrationNumber, t.quantity, t.expiryDate),
   );
 }
 
-/**
- * Get all drugs from the blockchain
- */
-export async function getAllDrugs(provider) {
-  try {
-    const deployed = await isContractDeployed(provider);
-    if (!deployed) {
-      console.warn("⚠️ No contract bytecode found at address:", CONTRACT_ADDRESS);
-      return [[], [], [], [], [], []];
-    }
-
-    const contract = getContract(provider);
-    console.log("🔍 Getting all drug IDs from contract:", CONTRACT_ADDRESS);
-
-    // Get all drug IDs first
-    const drugIds = await contract.getAllDrugIds();
-    console.log("✅ Found drug IDs:", drugIds);
-
-    if (!drugIds || drugIds.length === 0) {
-      console.log("⚠️ No drugs found");
-      return [[], [], [], [], [], []]; // Empty response structure
-    }
-
-    // Get details for each drug
-    const ids: number[] = [];
-    const names: string[] = [];
-    const quantities: number[] = [];
-    const expiryDates: number[] = [];
-    const addedBys: string[] = [];
-    const timestamps: number[] = [];
-
-    console.log("📦 Fetching details for", drugIds.length, "drugs...");
-
-
-    // Fetch all drugs in parallel for speed
-    const drugPromises = drugIds.map((drugId) => contract.getDrug(drugId));
-    const drugResults = await Promise.allSettled(drugPromises);
-
-    drugResults.forEach((result, idx) => {
-      if (result.status === "fulfilled") {
-        const drug = result.value;
-        ids.push(Number(drug.id));
-        names.push(drug.name);
-        quantities.push(Number(drug.quantity));
-        expiryDates.push(Number(drug.expiryDate));
-        addedBys.push(drug.addedBy);
-        timestamps.push(Date.now());
-      } else {
-        console.error(`Error fetching drug ${drugIds[idx]}:`, result.reason);
-      }
-    });
-
-    console.log("✅ Fetched all drug details");
-    return [ids, names, quantities, expiryDates, addedBys, timestamps];
-  } catch (error) {
-    console.error("❌ Error in getAllDrugs:", error);
-    if (isBadDecodeError(error)) {
-      console.warn("⚠️ ABI/address/network mismatch detected while reading drugs.");
-    }
-    // Return empty array instead of throwing so app doesn't break
-    console.warn(
-      "⚠️ Returning empty drugs array. Contract may not be deployed at this address.",
-    );
-    return [[], [], [], [], [], []]; // Empty response structure matching contract returns
+/** Splits into chunks of MAX_BATCH_SIZE (one transaction per chunk). */
+export async function addDrugsBatch(signer: ethers.Signer, items: NewDrugInput[]) {
+  if (items.length === 0) throw new Error('Batch is empty');
+  const receipts = [];
+  for (let i = 0; i < items.length; i += MAX_BATCH_SIZE) {
+    const chunk = items.slice(i, i + MAX_BATCH_SIZE).map(toTuple);
+    receipts.push(await send(signer, (c) => c.addDrugsBatch(chunk)));
   }
+  return receipts;
 }
 
-/**
- * Check if an address is an admin
- */
-export async function isAdmin(provider, address) {
-  try {
-    const deployed = await isContractDeployed(provider);
-    if (!deployed) return false;
+export const dispenseDrug = (signer: ethers.Signer, drugId: number, quantity: number, reason: string) =>
+  send(signer, (c) => c.dispenseDrug(drugId, quantity, reason));
 
-    const contract = getContract(provider);
-    console.log("🔍 Checking if admin:", address);
+export const adjustQuantity = (signer: ethers.Signer, drugId: number, newQuantity: number, reason: string) =>
+  send(signer, (c) => c.adjustQuantity(drugId, newQuantity, reason));
 
-    const result = await contract.isAdmin(address);
-    console.log("✅ isAdmin result:", result);
+export const writeOffExpired = (signer: ethers.Signer, drugId: number) =>
+  send(signer, (c) => c.writeOffExpired(drugId));
 
-    return result;
-  } catch (error) {
-    console.error("❌ Error in isAdmin:", error);
-    if (isBadDecodeError(error)) {
-      console.warn("⚠️ ABI/address/network mismatch detected while checking admin role.");
-    }
-    return false;
-  }
-}
+export const grantStaff = (signer: ethers.Signer, address: string) =>
+  send(signer, (c) => c.grantStaff(address));
 
-/**
- * Check if an address is pharmacy staff
- */
-export async function isPharmacyStaff(provider, address) {
-  try {
-    const deployed = await isContractDeployed(provider);
-    if (!deployed) return false;
+export const revokeStaff = (signer: ethers.Signer, address: string) =>
+  send(signer, (c) => c.revokeStaff(address));
 
-    const contract = getContract(provider);
-    console.log("🔍 Checking if pharmacy staff:", address);
+export const proposeAdmin = (signer: ethers.Signer, address: string) =>
+  send(signer, (c) => c.proposeAdmin(address));
 
-    const result = await contract.isPharmacyStaff(address);
-    console.log("✅ isPharmacyStaff result:", result);
-
-    return result;
-  } catch (error) {
-    console.error("❌ Error in isPharmacyStaff:", error);
-    if (isBadDecodeError(error)) {
-      console.warn("⚠️ ABI/address/network mismatch detected while checking pharmacy role.");
-    }
-    console.warn(
-      "⚠️ Could not verify pharmacy staff status. Contract may not be deployed.",
-    );
-    return false;
-  }
-}
-
-export type BatchDrugInput = {
-  name: string;
-  quantity: number;
-  expiryTimestamp: number;
-};
-
-/**
- * Add many drugs in one transaction (admin only). Requires `addDrugsBatch` on the deployed contract.
- */
-export async function addDrugsBatch(signer: ethers.Signer, items: BatchDrugInput[]) {
-  try {
-    if (items.length === 0) {
-      throw new Error("Batch is empty");
-    }
-    const provider = signer.provider as ethers.BrowserProvider | null;
-    if (!provider) {
-      throw new Error("Signer provider is unavailable");
-    }
-    const deployed = await isContractDeployed(provider);
-    if (!deployed) {
-      throw new Error(`No contract deployed at ${CONTRACT_ADDRESS} on current network`);
-    }
-
-    const contract = getContract(signer);
-    const names = items.map((i) => i.name);
-    const quantities = items.map((i) => BigInt(i.quantity));
-    const expiryTimestamps = items.map((i) => BigInt(i.expiryTimestamp));
-
-    console.log("📝 Adding drugs batch:", { count: items.length });
-
-    const tx = await contract.addDrugsBatch(names, quantities, expiryTimestamps);
-    console.log("⏳ Batch transaction sent:", tx.hash);
-
-    const receipt = await tx.wait();
-    console.log("✅ Batch transaction confirmed:", receipt);
-
-    return receipt;
-  } catch (error) {
-    console.error("❌ Error in addDrugsBatch:", error);
-    throw error;
-  }
-}
-
-/**
- * Add a new drug (admin only)
- */
-export async function addDrug(signer, name, quantity, expiryTimestamp) {
-  try {
-    const provider = signer.provider as ethers.BrowserProvider | null;
-    if (!provider) {
-      throw new Error("Signer provider is unavailable");
-    }
-    const deployed = await isContractDeployed(provider);
-    if (!deployed) {
-      throw new Error(`No contract deployed at ${CONTRACT_ADDRESS} on current network`);
-    }
-
-    const contract = getContract(signer);
-    console.log("📝 Adding drug:", { name, quantity, expiryTimestamp });
-
-    const tx = await contract.addDrug(name, quantity, expiryTimestamp);
-    console.log("⏳ Transaction sent:", tx.hash);
-
-    const receipt = await tx.wait();
-    console.log("✅ Transaction confirmed:", receipt);
-
-    return receipt;
-  } catch (error) {
-    console.error("❌ Error in addDrug:", error);
-    throw error;
-  }
-}
-
-/**
- * Dispense a drug (pharmacy staff only)
- */
-export async function dispenseDrug(signer, drugId, quantity) {
-  try {
-    const provider = signer.provider as ethers.BrowserProvider | null;
-    if (!provider) {
-      throw new Error("Signer provider is unavailable");
-    }
-    const deployed = await isContractDeployed(provider);
-    if (!deployed) {
-      throw new Error(`No contract deployed at ${CONTRACT_ADDRESS} on current network`);
-    }
-
-    const contract = getContract(signer);
-    console.log("💊 Dispensing drug:", { drugId, quantity });
-
-    const tx = await contract.dispenseDrug(drugId, quantity);
-    console.log("⏳ Transaction sent:", tx.hash);
-
-    const receipt = await tx.wait();
-    console.log("✅ Transaction confirmed:", receipt);
-
-    return receipt;
-  } catch (error) {
-    console.error("❌ Error in dispenseDrug:", error);
-    throw error;
-  }
-}
-
-/**
- * Get a single drug by ID
- */
-export async function getDrug(provider, drugId) {
-  try {
-    const contract = getContract(provider);
-    const drug = await contract.getDrug(drugId);
-    console.log("✅ Drug details:", drug);
-    return drug;
-  } catch (error) {
-    console.error("❌ Error in getDrug:", error);
-    throw error;
-  }
-}
+export const acceptAdmin = (signer: ethers.Signer) => send(signer, (c) => c.acceptAdmin());

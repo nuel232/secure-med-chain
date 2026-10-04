@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { Waves } from '@/components/ui/waves-background';
 
 const Landing = () => {
-  const { connectWallet, isLoading, isRoleLoading, isConnected, role, error, account } = useBlockchain();
+  const { connectWallet, isLoading, isRoleLoading, isConnected, role, error, account, isPendingAdmin, acceptAdmin } = useBlockchain();
   const [showRoleSelect, setShowRoleSelect] = useState(false);
   const navigate = useNavigate();
 
@@ -211,21 +211,28 @@ const Landing = () => {
                             <ChevronRight className="w-4 h-4 ml-auto" />
                           </Button>
                         </div>
+                      ) : role === 'unauthorized' ? (
+                        <div className="rounded-lg bg-warning/10 border border-warning/30 p-4">
+                          <p className="text-sm font-medium text-foreground mb-2">
+                            This wallet is not authorized
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            It is read-only. Ask the admin to grant this address pharmacy-staff access
+                            (Admin Dashboard → Staff tab).
+                          </p>
+                          {isPendingAdmin && (
+                            <Button className="mt-3 w-full" onClick={() => acceptAdmin()}>
+                              Accept admin role
+                            </Button>
+                          )}
+                        </div>
                       ) : role === null ? (
                         <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4">
                           <p className="text-destructive text-sm font-medium mb-2">
                             ⚠️ No Role Assigned
                           </p>
                           <p className="text-destructive/80 text-xs">
-                              This wallet does not have the admin (deployer) address.
-  All non-deployer wallets automatically have pharmacy staff access.
-  If you are seeing this, the contract connection is failing — 
-  check your network is Sepolia and the contract address is correct.
-                            <br />
-                            <br />
-                            <strong>For admins:</strong> Contact the contract deployer to assign you an admin role.
-                            <br />
-                            <strong>For pharmacy staff:</strong> Ask an admin to assign you the pharmacy staff role using the <code className="bg-destructive/20 px-1 rounded">assignRole()</code> function.
+                              The app could not read your role from the contract. Check that MetaMask is on Sepolia and that VITE_CONTRACT_ADDRESS points at the deployed contract.
                           </p>
                         </div>
                       ) : null}

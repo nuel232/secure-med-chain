@@ -1,559 +1,138 @@
-# Secure MedChain - Blockchain-Based Drug Inventory Management System
+# Secure MedChain
 
-## Overview
+Blockchain-backed drug inventory for hospitals and pharmacies. Stock is added by an admin, dispensed
+by whitelisted pharmacy staff, and every action is written to the chain as an event, giving a
+tamper-evident audit trail.
 
-Secure MedChain is a healthcare application that uses blockchain technology to manage pharmaceutical drug inventory. The system provides two distinct user roles with automatic role-based access control based on wallet addresses.
+Final-year project. Runs on the Sepolia testnet (or a local Hardhat node).
 
-### Key Features
-- **Blockchain-Secured Inventory**: All drug records stored on the Sepolia testnet blockchain
-- **Automatic Role Detection**: Users are automatically classified as Admin (contract deployer) or Pharmacy Staff (all other addresses)
-- **Drug Management**: Add, track, and dispense medications with expiry date tracking
-- **Batch CSV Import**: Import multiple drugs at once from a CSV file with validation
-- **Transaction History**: Immutable record of all inventory transactions
-- **Real-time Synchronization**: Live updates of inventory status across the system
+## Why a blockchain here?
 
----
+A normal database with audit logs is enough when one organisation controls the data. The case for a
+chain is **multi-party trust**: a hospital group, its suppliers and a regulator who don't all trust one
+administrator's ability to quietly edit history. Once an entry is mined, nobody, including the admin,
+can rewrite it; corrections appear as new, attributed events.
 
-## Quick Start Guide
+## Features
 
-### Prerequisites
-- **Wallet**: MetaMask browser extension installed and configured
-- **Network**: Connected to Sepolia testnet
-- **Testnet ETH**: Small amount of Sepolia ETH for transaction fees
-- **Node.js**: v18+ (for development)
-- **Bun**: v1.0+ (package manager)
+- **Role-based access enforced by the contract**, not just the UI (see below)
+- Add drug batches with batch number and optional regulator registration number (e.g. NAFDAC)
+- **CSV import**, sent as one transaction per 100 rows ([docs/CSV_IMPORT.md](docs/CSV_IMPORT.md))
+- Dispense with a mandatory reason / destination, blocked automatically for expired or insufficient stock
+- Admin stock **adjustment** (with reason) and **write-off** of expired stock; history is never deleted
+- Staff management and two-step admin hand-over from the UI
+- Audit log rebuilt entirely from on-chain events, plus analytics dashboard
+- Contract test suite (Hardhat) and CI
 
-### Environment Setup
+## Security model
 
-1. **Clone or Open the Project**
-   ```pwsh
-   cd d:\vscode\secure-med-chain
-   ```
+| Actor | Can do |
+| --- | --- |
+| **Admin** (deployer; transferable) | Add stock, adjust, write off, grant/revoke staff, propose a new admin, dispense |
+| **Authorized staff** (whitelisted by admin) | Dispense |
+| **Anyone else** | Read only |
 
-2. **Install Dependencies**
-   ```pwsh
-   bun install
-   ```
+- A random wallet **cannot** dispense. `dispenseDrug` reverts unless the caller is admin or whitelisted.
+- Admin transfer is **two-step** (`proposeAdmin` then `acceptAdmin`), so a mistyped address can't lock you out.
+- Dispensing and adjusting require a reason, so every stock movement is explained on-chain.
+- The contract is the source of truth for authorization. The UI hides controls for convenience only.
 
-3. **Configure Network**
-   - Open MetaMask
-   - Switch to Sepolia testnet
-   - Ensure you have testnet ETH for gas fees
+**Privacy:** a public chain is permanent and world-readable. Never enter patient names or IDs in
+reason fields. Use a ward, department or prescription-batch reference.
 
-4. **Deploy Smart Contract** (if needed)
-   - Go to [Remix IDE](https://remix.ethereum.org)
-   - Paste contract code from `src/contracts/DrugInventory.sol`
-   - Compile with Solidity 0.8.19
-   - Deploy to Sepolia testnet
-   - Copy the contract address
+**Known limitations** (reasonable for a prototype, worth stating in a defense):
+- A single admin key is a single point of failure. A multisig admin (e.g. Safe) is the production answer.
+- The chain proves *what was recorded*, not that the physical stock matches. Pair it with periodic stock-takes (`adjustQuantity` exists for this).
+- Event queries on public RPC endpoints can be slow or range-limited; set `VITE_DEPLOY_BLOCK`.
 
-5. **Update Contract Address**
-   - Open `src/services/drugInventoryService.ts`
-   - Replace `CONTRACT_ADDRESS` with your deployed contract address
-   - Open `src/contexts/BlockchainContext.tsx`
-   - Update `CONTRACT_ADDRESS` with the same address
+## Quick start
 
-6. **Start Development Server**
-   ```pwsh
-   bun run dev
-   ```
+Prerequisites: Node 18+, MetaMask, and Sepolia ETH (or a local chain).
 
-7. **Access the Application**
-   - Open http://localhost:5173 in your browser
-   - Click "Connect Wallet" to authenticate with MetaMask
-
----
-
-## User Roles & Access
-
-### Admin (Contract Deployer)
-- **Automatic Identification**: The address that deployed the contract is automatically the Admin
-- **Permissions**:
-  - View all drugs in inventory
-  - Add new drugs to inventory
-  - Dispense/remove drugs from stock
-  - Access both Admin Dashboard and Pharmacy Dashboard
-- **Dashboard**: Admin Dashboard + Pharmacy Dashboard
-
-### Pharmacy Staff (All Other Addresses)
-- **Automatic Identification**: Any wallet address that is not the deployer
-- **Permissions**:
-  - View all drugs in inventory
-  - Dispense/remove drugs from stock
-  - Cannot add new drugs to inventory
-- **Dashboard**: Pharmacy Dashboard only
-
-### Access Control Logic
-- Role determination happens automatically on wallet connection
-- Based on comparison: `userAddress === deployerAddress`
-- No manual role assignment needed
-
----
-
-## Application Architecture
-
-### Project Structure
-```
-secure-med-chain/
-├── src/
-│   ├── contracts/
-│   │   └── DrugInventory.sol          # Smart contract for blockchain
-│   ├── services/
-│   │   └── drugInventoryService.ts    # Contract interaction layer
-│   ├── contexts/
-│   │   └── BlockchainContext.tsx      # Global state management
-│   ├── pages/
-│   │   ├── Landing.tsx                # Home page with wallet connection
-│   │   ├── AdminDashboard.tsx         # Admin-only interface
-│   │   ├── PharmacyDashboard.tsx      # Pharmacy staff interface
-│   │   └── NotFound.tsx               # 404 page
-│   ├── components/
-│   │   ├── shared/                    # Shared UI components
-│   │   ├── ui/                        # shadcn/ui components
-│   │   └── layout/                    # Layout components
-│   ├── hooks/
-│   │   └── useBlockchain.ts           # Custom React hook for blockchain
-│   ├── lib/
-│   │   └── utils.ts                   # Utility functions
-│   ├── App.tsx                        # Main app component
-│   └── main.tsx                       # Entry point
-├── src/Abi/
-│   └── DrugInventoryABI.json          # Smart contract interface
-├── vite.config.ts                     # Vite configuration
-├── tsconfig.json                      # TypeScript configuration
-└── package.json                       # Dependencies
+```bash
+npm install --legacy-peer-deps      # or: bun install
+cp .env.example .env                # then fill in the address after deploying
 ```
 
-### Technology Stack
-- **Frontend**: React 18, TypeScript
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS
-- **UI Library**: shadcn/ui (Radix UI)
-- **Animation**: Framer Motion
-- **Web3**: ethers.js v6.16.0
-- **Blockchain**: Solidity 0.8.19
-- **Package Manager**: Bun
-- **Development**: ESLint, PostCSS
+### 1. Run the contract tests
 
----
-
-## CSV Batch Import Guide
-
-### CSV File Format
-
-Your CSV file must have the following structure:
-
-**Header Row (Required):**
-```
-name,quantity,expiryDate
+```bash
+npm run test:contract
 ```
 
-**Data Rows:**
-```
-name,quantity,expiryDate
-Paracetamol 500mg,1000,2025-12-31
-Aspirin 100mg,500,2026-06-15
-Ibuprofen 200mg,750,2026-03-20
-```
+### 2. Deploy the contract
 
-### Field Requirements
+**Local chain** (fastest for development):
 
-- **name**: Drug name (string, max 255 characters)
-- **quantity**: Number of units (positive integer)
-- **expiryDate**: Date in YYYY-MM-DD format (must be future date)
-
-### Import Process
-
-1. Click **"Import CSV"** button on Admin Dashboard
-2. Download sample template if needed (contains example format)
-3. Select your CSV file
-4. System validates all rows instantly
-5. Valid rows shown in green, invalid rows in red with error messages
-6. Review validation results before import
-7. Click **"Import [N] Valid Drugs"** to proceed
-8. Approve transactions in MetaMask (one per drug)
-9. System shows import summary with success/failure counts
-
-### Validation Rules
-
-The system validates each row for:
-- ✅ Drug name not empty and under 255 characters
-- ✅ Quantity is a positive number
-- ✅ Expiry date follows YYYY-MM-DD format
-- ✅ Expiry date is in the future
-- ✅ No duplicate entries in the same import
-
-### Common Errors & Solutions
-
-| Error | Solution |
-|-------|----------|
-| "Drug name is required" | Ensure first column has a value |
-| "Quantity must be a positive number" | Use whole numbers only (1, 100, 500, etc.) |
-| "Expiry date must be in YYYY-MM-DD format" | Use format like 2025-12-31 |
-| "Expiry date must be in the future" | Use a date after today's date |
-| "CSV file is empty" | Ensure file has at least one data row (plus header) |
-
-### Tips for Best Results
-
-- **Use the Sample Template**: Download the provided sample CSV to ensure correct format
-- **Test First**: Try importing a small batch first to test your workflow
-- **Keep Names Consistent**: Use standardized naming across your pharmacy
-- **Batch Errors**: Invalid rows won't block valid rows - only valid rows are imported
-- **Confirmation Times**: Each drug requires blockchain confirmation (10-30 seconds)
-
----
-
-## Smart Contract Reference
-
-### Contract: DrugInventory.sol
-
-#### Key Functions
-
-**Admin Only Functions:**
-
-```solidity
-// Add a new drug to inventory
-function addDrug(
-    string calldata name,
-    uint256 quantity,
-    uint256 expiryTimestamp
-) external onlyAdmin
+```bash
+npm run chain                       # terminal 1
+npm run deploy:local                # terminal 2, prints the .env values
 ```
 
-**Admin & Pharmacy Staff Functions:**
+Add a Hardhat account to MetaMask (network `Localhost 8545`, chain id 31337).
 
-```solidity
-// Dispense/remove drugs from inventory
-function dispenseDrug(
-    uint256 drugId,
-    uint256 quantity
-) external onlyPharmacyOrAdmin
+**Sepolia** with Hardhat:
+
+```bash
+export SEPOLIA_RPC_URL=...          # e.g. from Alchemy / Infura
+export DEPLOYER_PRIVATE_KEY=...     # a throwaway testnet key, never a real one
+npm run deploy:sepolia
 ```
 
-**View Functions (Public Access):**
+Or paste `src/contracts/DrugInventory.sol` into [Remix](https://remix.ethereum.org), compile with
+Solidity **0.8.19**, and deploy. The deploying wallet becomes admin.
 
-```solidity
-// Get all drug IDs in inventory
-function getAllDrugIds() external view returns (uint256[])
+The deploy script prints `VITE_CONTRACT_ADDRESS` and `VITE_DEPLOY_BLOCK`. Put them in `.env`.
 
-// Get drug details by ID
-function getDrug(uint256 drugId) external view returns (
-    string name,
-    uint256 quantity,
-    uint256 expiryDate,
-    address addedBy,
-    uint256 timestamp
-)
+To verify on Etherscan, use the same compiler settings as the deploy (0.8.19, optimizer on, 200 runs for
+the Hardhat build). A mismatch fails verification.
 
-// Get total number of drugs
-function getTotalDrugs() external view returns (uint256)
+### 3. Run the app
 
-// Check if address is admin
-function isAdmin(address addr) external view returns (bool)
-
-// Check if address is pharmacy staff
-function isPharmacyStaff(address addr) external view returns (bool)
-
-// Check if drug has expired
-function isExpired(uint256 drugId) external view returns (bool)
+```bash
+npm run dev                         # http://localhost:5173
 ```
 
-#### Access Control Modifiers
+Connect MetaMask. The deployer lands on the Admin Dashboard. Use **Staff** to authorize other wallets.
 
-- **onlyAdmin**: Allows only the contract deployer
-- **onlyPharmacyOrAdmin**: Allows both admins and pharmacy staff
-- **drugExists**: Ensures drug ID exists before operations
-
----
-
-## Workflow & User Journey
-
-### For Admin Users
-
-#### Adding Drugs Individually
-
-1. **Connect Wallet**
-   - Go to Landing page
-   - Click "Connect Wallet"
-   - Approve MetaMask connection
-   - System automatically detects Admin role
-
-2. **Add Drugs** (Admin Dashboard)
-   - Navigate to Admin Dashboard
-   - Fill in drug name, quantity, and expiry date
-   - Click "Add New Drug"
-   - Approve transaction in MetaMask
-   - Drug appears in inventory after confirmation
-
-#### Batch Import Drugs from CSV
-
-1. **Prepare CSV File**
-   - Format: `name,quantity,expiryDate`
-   - Each row represents one drug
-   - Date format must be YYYY-MM-DD
-   - Example:
-     ```
-     name,quantity,expiryDate
-     Paracetamol 500mg,1000,2025-12-31
-     Aspirin 100mg,500,2026-06-15
-     Ibuprofen 200mg,750,2026-03-20
-     ```
-
-2. **Import Drugs**
-   - Navigate to Admin Dashboard
-   - Click "Import CSV" button
-   - Download sample template if needed
-   - Select your CSV file
-   - Review validation results (valid/invalid rows)
-   - Click "Import [N] Valid Drugs"
-   - Approve transactions in MetaMask
-
-3. **Monitor Import Progress**
-   - System validates each row during upload
-   - Preview shows which drugs will be imported
-   - Invalid rows are highlighted with error messages
-   - Can import only valid rows or choose different file
-
-3. **Dispense Drugs** (Pharmacy Dashboard)
-   - Navigate to Pharmacy Dashboard
-   - Select drug and quantity to dispense
-   - Click "Dispense"
-   - Approve transaction in MetaMask
-   - Inventory updates after confirmation
-
-### For Pharmacy Staff
-
-1. **Connect Wallet**
-   - Go to Landing page
-   - Click "Connect Wallet"
-   - Approve MetaMask connection
-   - System automatically detects Pharmacy Staff role
-
-2. **View Inventory**
-   - Access Pharmacy Dashboard (automatically redirected)
-   - See all available drugs and quantities
-
-3. **Dispense Drugs**
-   - Select drug and quantity needed
-   - Click "Dispense"
-   - Approve transaction in MetaMask
-   - Quantity deducted from inventory
-
----
-
-## Data Flow
+## Project structure
 
 ```
-MetaMask Wallet
-    ↓
-BlockchainContext (Global State)
-    ↓
-drugInventoryService (Contract Interaction)
-    ↓
-ethers.js (Web3 Library)
-    ↓
-Smart Contract on Sepolia Testnet
-    ↓
-Blockchain Data Storage
+src/
+  contracts/DrugInventory.sol      # the contract (single source of truth)
+  Abi/DrugInventoryABI.json        # generated from it, see "Changing the contract"
+  config.ts                        # env-driven configuration
+  services/drugInventoryService.ts # all contract calls (ethers v6)
+  contexts/BlockchainContext.tsx   # wallet, role, data and actions
+  pages/                           # Landing, AdminDashboard, PharmacyDashboard
+  components/shared/               # DrugCard, StockActions, StaffManagement, ...
+  utils/                           # csvParser, dates
+test/DrugInventory.test.cjs        # contract tests
+scripts/deploy.cjs                 # deploy + prints env values
 ```
 
-### State Management
+Stack: React 18, TypeScript, Vite, Tailwind, shadcn/ui, ethers v6, Solidity 0.8.19, Hardhat.
 
-The `BlockchainContext` manages:
-- User wallet address and role
-- Connected contract instance
-- Current drug inventory
-- Loading and error states
-- Transaction status
+## Changing the contract
 
-Access via custom hook:
-```typescript
-const { role, drugs, addDrug, dispenseDrug } = useBlockchain();
+After editing `DrugInventory.sol`:
+
+```bash
+npm run compile
+node -e "require('fs').writeFileSync('src/Abi/DrugInventoryABI.json', JSON.stringify(require('./artifacts/src/contracts/DrugInventory.sol/DrugInventory.json').abi, null, 2))"
+npm run test:contract
 ```
 
----
-
-## Development Workflow
-
-### Running the Application
-
-**Development Mode:**
-```pwsh
-bun run dev
-```
-
-**Build for Production:**
-```pwsh
-bun run build
-```
-
-**Preview Production Build:**
-```pwsh
-bun run preview
-```
-
-**Linting:**
-```pwsh
-bun run lint
-```
-
-### Key Files to Modify
-
-- **Add Features**: Create new components in `src/components/`
-- **Smart Contract**: Edit `src/contracts/DrugInventory.sol` then redeploy
-- **Contract Interaction**: Update `src/services/drugInventoryService.ts`
-- **State Management**: Modify `src/contexts/BlockchainContext.tsx`
-- **UI Pages**: Edit files in `src/pages/`
-
----
-
-## Testing
-
-### Manual Testing Checklist
-
-**Wallet Connection:**
-- [ ] MetaMask connection works
-- [ ] Wallet address displays correctly
-- [ ] Role is correctly identified (Admin or Pharmacy Staff)
-- [ ] Switching wallets updates role appropriately
-
-**Admin Functionality:**
-- [ ] Can access Admin Dashboard
-- [ ] Can add drugs with valid data
-- [ ] Can dispense drugs from inventory
-- [ ] Cannot add drugs with invalid data (error handling)
-
-**Pharmacy Functionality:**
-- [ ] Pharmacy staff only sees Pharmacy Dashboard
-- [ ] Can dispense drugs
-- [ ] Cannot access Admin Dashboard (redirected to home)
-
-**Inventory Management:**
-- [ ] Drug quantities update correctly after dispensing
-- [ ] Expired drugs are marked as expired
-- [ ] Drug list refreshes in real-time
-
-**Transaction Handling:**
-- [ ] MetaMask prompts appear for transactions
-- [ ] Failed transactions show error messages
-- [ ] Successful transactions update inventory
-
-### Network Testing
-- Test on Sepolia testnet only
-- Verify gas fees are deducted correctly
-- Confirm transaction confirmations appear
-
----
+Then redeploy and update `.env`. Deployed contracts are immutable, so old addresses keep the old code.
 
 ## Troubleshooting
 
-### Wallet Connection Issues
-
-**Problem**: "Could not detect window.ethereum"
-- **Solution**: Install MetaMask extension and refresh browser
-
-**Problem**: "Not connected to Sepolia testnet"
-- **Solution**: 
-  - Open MetaMask
-  - Click network selector
-  - Switch to "Sepolia test network"
-  - Refresh application
-
-### Contract Interaction Issues
-
-**Problem**: "contract.getAllDrugs is not a function"
-- **Solution**: 
-  - Verify CONTRACT_ADDRESS is correct in `drugInventoryService.ts`
-  - Check that DrugInventoryABI.json contains the function
-  - Ensure contract is deployed to Sepolia
-
-**Problem**: "Insufficient funds for transaction"
-- **Solution**: Get testnet ETH from Sepolia faucet (search "Sepolia faucet")
-
-**Problem**: "Error: Transaction reverted"
-- **Solution**: 
-  - Check role permissions (Admin vs Pharmacy Staff)
-  - Verify drug exists before dispensing
-  - Ensure sufficient quantity available
-
-### Application Issues
-
-**Problem**: "Page redirects immediately after wallet connection"
-- **Solution**: Clear browser cache and cookies, reconnect wallet
-
-**Problem**: "Inventory doesn't update after transaction"
-- **Solution**: Wait for blockchain confirmation (usually 10-30 seconds), refresh page
-
-**Problem**: "Build fails with TypeScript errors"
-- **Solution**: 
-  - Delete `node_modules/` and `.bun/` directories
-  - Run `bun install` again
-  - Check that all types match in `BlockchainContext.tsx`
-
----
-
-## Important Notes & Caveats
-
-### Current Limitations
-- **Sepolia Testnet Only**: Application currently deployed to test network only
-- **No Persistency**: Drug data only exists on blockchain (no database backup)
-- **Gas Fees Required**: Every transaction requires testnet ETH
-- **Confirmation Times**: Blockchain transactions take 10-30 seconds to confirm
-
-### Security Considerations
-- **Private Keys**: Never share your wallet's private key
-- **MetaMask**: Only approve transactions you initiated
-- **Network Verification**: Always verify you're on Sepolia testnet before transactions
-- **Admin Responsibility**: The deployer address is permanent admin - cannot be changed
-
-### Role-Based Restrictions
-- **Admin Cannot Transfer Role**: Deployment address is automatically admin forever
-- **Pharmacy Staff Cannot Become Admin**: Role change requires redeployment
-- **Contract Owner Immutable**: Deployer is hardcoded in contract
-
----
-
-## Deployment Checklist
-
-When deploying to production:
-
-- [ ] Deploy contract to mainnet (not Sepolia)
-- [ ] Update CONTRACT_ADDRESS in both service and context files
-- [ ] Configure mainnet RPC endpoint
-- [ ] Test thoroughly with mainnet ETH
-- [ ] Ensure adequate gas fee budget
-- [ ] Set up proper error monitoring
-- [ ] Document contract deployment details
-- [ ] Backup deployment transaction hash
-
----
-
-## Resources
-
-- **MetaMask**: https://metamask.io
-- **Sepolia Faucet**: https://sepolia-faucet.pk910.de
-- **Remix IDE**: https://remix.ethereum.org
-- **ethers.js Docs**: https://docs.ethers.org
-- **Solidity Docs**: https://docs.soliditylang.org
-- **Tailwind CSS**: https://tailwindcss.com
-
----
+- **"VITE_CONTRACT_ADDRESS is not set"**: create `.env` from `.env.example` and restart `npm run dev`.
+- **"No contract found at ... on chain ..."**: MetaMask is on a different network than where you deployed.
+- **"This wallet is not authorized"**: it is read-only until the admin grants it access in the Staff tab.
+- **Audit log fails to load**: set `VITE_DEPLOY_BLOCK` to the deployment block, or use an RPC provider without a tight `eth_getLogs` range limit.
+- **Empty dashboard after a redeploy**: you're pointing at the old address. Update `.env`.
 
 ## License
 
-This project uses the MIT License. See individual component licenses for details.
-
----
-
-## Support
-
-For issues or questions:
-1. Check the Troubleshooting section above
-2. Verify you're on Sepolia testnet
-3. Confirm wallet has sufficient testnet ETH
-4. Review error messages in browser console
-5. Check transaction status on Sepolia Etherscan: https://sepolia.etherscan.io
-
----
-
-**Last Updated**: This consolidated documentation replaces all previous markdown files (DEPLOYMENT_GUIDE.md, QUICK_START.md, PROJECT_STATUS.md, etc.) with a single comprehensive reference.
+MIT (see the SPDX header in the contract). Add a `LICENSE` file with your name before publishing.

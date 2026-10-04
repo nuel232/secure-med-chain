@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Pill, Calendar, Package, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Drug } from '@/contexts/BlockchainContext';
@@ -8,9 +9,11 @@ interface DrugCardProps {
   drug: Drug;
   onDispense?: (drug: Drug) => void;
   showDispenseButton?: boolean;
+  /** Extra controls rendered at the bottom of the card (e.g. admin stock actions). */
+  footer?: ReactNode;
 }
 
-export const DrugCard = ({ drug, onDispense, showDispenseButton = false }: DrugCardProps) => {
+export const DrugCard = ({ drug, onDispense, showDispenseButton = false, footer }: DrugCardProps) => {
   const isExpired = drug.expiryDate < Date.now();
   const isExpiringSoon = !isExpired && drug.expiryDate < Date.now() + 30 * 24 * 60 * 60 * 1000;
   const isLowStock = drug.quantity < 100;
@@ -76,6 +79,10 @@ export const DrugCard = ({ drug, onDispense, showDispenseButton = false }: DrugC
           <div>
             <h3 className="font-semibold text-foreground">{drug.name}</h3>
             <p className="text-sm text-muted-foreground">ID: #{drug.id}</p>
+            <p className="text-xs text-muted-foreground">
+              Batch: {drug.batchNumber}
+              {drug.registrationNumber ? ` · Reg: ${drug.registrationNumber}` : ''}
+            </p>
           </div>
         </div>
         {getStatusBadge()}
@@ -132,6 +139,8 @@ export const DrugCard = ({ drug, onDispense, showDispenseButton = false }: DrugC
           </p>
         </div>
       )}
+
+      {footer && <div className="mt-4">{footer}</div>}
     </motion.div>
   );
 };

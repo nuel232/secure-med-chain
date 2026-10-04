@@ -15,9 +15,28 @@ interface TransactionLogProps {
   index: number;
 }
 
+const LOG_LABELS: Record<TransactionLogType['type'], string> = {
+  ADD_DRUG: 'Drug Added',
+  BATCH_IMPORT: 'Batch Import',
+  DISPENSE_DRUG: 'Drug Dispensed',
+  ADJUST_STOCK: 'Stock Adjusted',
+  WRITE_OFF: 'Expired Stock Written Off',
+  STAFF_GRANTED: 'Staff Access Granted',
+  STAFF_REVOKED: 'Staff Access Revoked',
+};
+
 export const TransactionLogCard = ({ log, index }: TransactionLogProps) => {
   const isAddDrug = log.type === 'ADD_DRUG';
   const isBatchImport = log.type === 'BATCH_IMPORT';
+  const label = LOG_LABELS[log.type];
+  const isStaffEvent = log.type === 'STAFF_GRANTED' || log.type === 'STAFF_REVOKED';
+  const quantityLabel = isBatchImport
+    ? `${log.quantity} drugs`
+    : isStaffEvent
+      ? ''
+      : log.type === 'ADJUST_STOCK'
+        ? `now ${log.quantity} units`
+        : `${isAddDrug ? '+' : '-'}${log.quantity} units`;
   const [open, setOpen] = useState(false);
 
   const formatDate = (timestamp: number) => {
@@ -48,11 +67,7 @@ export const TransactionLogCard = ({ log, index }: TransactionLogProps) => {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {isBatchImport
-                ? 'Batch Import Details'
-                : isAddDrug
-                  ? 'Drug Added Details'
-                  : 'Drug Dispensed Details'}
+              {label} Details
             </DialogTitle>
           </DialogHeader>
 
@@ -160,7 +175,7 @@ export const TransactionLogCard = ({ log, index }: TransactionLogProps) => {
           <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
             <div>
               <h4 className="font-medium text-foreground">
-                {isBatchImport ? 'Batch Import' : isAddDrug ? 'Drug Added' : 'Drug Dispensed'}
+                {label}
               </h4>
               <p className="text-sm text-muted-foreground">{log.drugName}</p>
             </div>
@@ -170,9 +185,7 @@ export const TransactionLogCard = ({ log, index }: TransactionLogProps) => {
                 isAddDrug || isBatchImport ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary',
               )}
             >
-              {isBatchImport
-                ? `${log.quantity} drugs`
-                : `${isAddDrug ? '+' : '-'}${log.quantity} units`}
+              {quantityLabel}
             </span>
           </div>
 
@@ -181,6 +194,13 @@ export const TransactionLogCard = ({ log, index }: TransactionLogProps) => {
               <Clock className="h-3.5 w-3.5" />
               <span>{formatDate(log.timestamp)}</span>
             </div>
+
+            {log.reason && (
+              <div className="rounded-lg bg-muted/50 px-3 py-2">
+                <span className="text-muted-foreground">Reason: </span>
+                <span className="text-foreground">{log.reason}</span>
+              </div>
+            )}
 
             <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
               <span className="text-muted-foreground">Performer</span>

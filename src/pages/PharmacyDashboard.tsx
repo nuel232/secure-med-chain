@@ -17,6 +17,7 @@ const PharmacyDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDrug, setSelectedDrug] = useState<Drug | null>(null);
   const [dispenseQuantity, setDispenseQuantity] = useState('');
+  const [dispenseReason, setDispenseReason] = useState('');
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -51,7 +52,23 @@ const PharmacyDashboard = () => {
       return;
     }
 
-    const qty = parseInt(dispenseQuantity);
+    const qty = parseInt(dispenseQuantity, 10);
+    if (!Number.isInteger(qty) || qty <= 0) {
+      toast({
+        title: 'Error',
+        description: 'Quantity must be a positive whole number',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!dispenseReason.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please say where / why this is being dispensed',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (qty > selectedDrug.quantity) {
       toast({
         title: 'Error',
@@ -61,7 +78,7 @@ const PharmacyDashboard = () => {
       return;
     }
 
-    const success = await dispenseDrug(selectedDrug.id, qty);
+    const success = await dispenseDrug(selectedDrug.id, qty, dispenseReason.trim());
 
     if (success) {
       toast({
@@ -70,6 +87,7 @@ const PharmacyDashboard = () => {
       });
       setSelectedDrug(null);
       setDispenseQuantity('');
+      setDispenseReason('');
     }
   };
 
@@ -207,6 +225,20 @@ const PharmacyDashboard = () => {
                     onChange={(e) => setDispenseQuantity(e.target.value)}
                     max={selectedDrug.quantity}
                   />
+                </div>
+
+                <div>
+                  <Label htmlFor="dispenseReason">Reason / destination</Label>
+                  <Input
+                    id="dispenseReason"
+                    placeholder="e.g., Ward 3, Outpatient pharmacy"
+                    maxLength={200}
+                    value={dispenseReason}
+                    onChange={(e) => setDispenseReason(e.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Recorded publicly and permanently. Do not enter patient names or IDs.
+                  </p>
                 </div>
 
                 {error && (

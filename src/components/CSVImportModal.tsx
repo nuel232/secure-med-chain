@@ -15,7 +15,7 @@ import {
 interface CSVImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImport: (drugs: DrugImportRow[]) => Promise<void>;
+  onImport: (drugs: DrugImportRow[]) => Promise<boolean>;
   isLoading?: boolean;
 }
 
@@ -46,6 +46,11 @@ export const CSVImportModal = ({
       const content = await readFileAsText(file);
       const result = parseCSV(content);
 
+      if (result.fileError) {
+        setImportError(result.fileError);
+        return;
+      }
+
       if (result.totalRows === 0) {
         setImportError('CSV file is empty (no data rows found)');
         return;
@@ -73,7 +78,13 @@ export const CSVImportModal = ({
 
     setImporting(true);
     try {
-      await onImport(parseResult.valid);
+      const ok = await onImport(parseResult.valid);
+      if (!ok) {
+        setImportError(
+          'The import did not complete. Check the inventory before retrying: large files are sent in batches of 100, so earlier batches may already be on-chain.',
+        );
+        return;
+      }
       // Reset on success
       setParseResult(null);
       setImportError(null);
@@ -123,9 +134,11 @@ export const CSVImportModal = ({
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Upload a CSV file with columns: <strong>name, quantity, expiryDate</strong>
+                    Required columns: <strong>name, batchNumber, quantity, expiryDate</strong>
                     <br />
-                    Date format must be YYYY-MM-DD (e.g., 2025-12-31)
+                    Optional: <strong>registrationNumber</strong> (e.g. NAFDAC reg. no.)
+                    <br />
+                    Date format must be YYYY-MM-DD (e.g., 2028-12-31). A drug is valid through its expiry date.
                   </AlertDescription>
                 </Alert>
 
@@ -223,7 +236,7 @@ export const CSVImportModal = ({
                             <div>
                               <p className="font-medium text-foreground">{drug.name}</p>
                               <p className="text-xs text-muted-foreground">
-                                Qty: {drug.quantity} | Expires: {drug.expiryDate}
+                                Batch: {drug.batchNumber} | Qty: {drug.quantity} | Expires: {drug.expiryDate}
                               </p>
                             </div>
                             <span className="text-xs bg-green-500/20 text-green-700 px-2 py-1 rounded">

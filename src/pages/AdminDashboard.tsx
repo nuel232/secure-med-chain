@@ -1,11 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
-import { Plus, Package, History, Search, X, Calendar, Upload, BarChart } from 'lucide-react';
+import { Plus, Package, History, Search, X, Calendar, Upload, BarChart, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Header } from '@/components/shared/Header';
 import { DrugCard } from '@/components/shared/DrugCard';
+import { StockActions } from '@/components/shared/StockActions';
+import { StaffManagement } from '@/components/shared/StaffManagement';
 import { TransactionLogCard } from '@/components/shared/TransactionLog';
 import AnalyticsDashboard from '@/components/shared/AnalyticsDashboard';
 import { PageTransition, StaggerContainer, StaggerItem } from '@/components/layout/PageTransition';
@@ -14,17 +16,20 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { CSVImportModal } from '@/components/CSVImportModal';
 import { DrugImportRow } from '@/utils/csvParser';
+import { isFutureExpiry } from '@/utils/dates';
 
-type Tab = 'drugs' | 'logs' | 'analytics' | 'add';
+type Tab = 'drugs' | 'logs' | 'analytics' | 'staff';
+
+const EMPTY_DRUG = { name: '', batchNumber: '', registrationNumber: '', quantity: '', expiryDate: '' };
 
 const AdminDashboard = () => {
-  const { drugs, transactionLogs, addDrug, isLoading, role } = useBlockchain();
+  const { drugs, transactionLogs, addDrug, importDrugsBatch, isLoading, role, error } = useBlockchain();
   const [activeTab, setActiveTab] = useState<Tab>('drugs');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCSVImportModal, setShowCSVImportModal] = useState(false);
   const [csvImporting, setCSVImporting] = useState(false);
-  const [newDrug, setNewDrug] = useState({ name: '', quantity: '', expiryDate: '' });
+  const [newDrug, setNewDrug] = useState(EMPTY_DRUG);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -49,72 +54,65 @@ const AdminDashboard = () => {
   );
 
   const handleAddDrug = async () => {
-    if (!newDrug.name || !newDrug.quantity || !newDrug.expiryDate) {
+    if (!newDrug.name.trim() || !newDrug.batchNumber.trim() || !newDrug.quantity || !newDrug.expiryDate) {
       toast({
         title: 'Error',
-        description: 'Please fill in all fields',
+        description: 'Name, batch number, quantity and expiry date are required',
         variant: 'destructive',
       });
       return;
     }
 
-    const success = await addDrug(
-      newDrug.name,
-      parseInt(newDrug.quantity),
-      new Date(newDrug.expiryDate)
-    );
+    const quantity = parseInt(newDrug.quantity, 10);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      toast({ title: 'Error', description: 'Quantity must be a positive whole number', variant: 'destructive' });
+      return;
+    }
+    if (!isFutureExpiry(newDrug.expiryDate)) {
+      toast({ title: 'Error', description: 'Expiry date must be in the future', variant: 'destructive' });
+      return;
+    }
+
+    const success = await addDrug({
+      name: newDrug.name.trim(),
+      batchNumber: newDrug.batchNumber.trim(),
+      registrationNumber: newDrug.registrationNumber.trim(),
+      quantity,
+      expiryDate: newDrug.expiryDate,
+    });
 
     if (success) {
       toast({
         title: 'Success',
         description: 'Drug added to blockchain successfully',
       });
-      setNewDrug({ name: '', quantity: '', expiryDate: '' });
+      setNewDrug(EMPTY_DRUG);
       setShowAddModal(false);
       setActiveTab('drugs');
     }
   };
 
-  const handleCSVImport = async (drugs: DrugImportRow[]) => {
+  const handleCSVImport = async (rows: DrugImportRow[]): Promise<boolean> => {
     setCSVImporting(true);
-    let successCount = 0;
-    let failureCount = 0;
-
-    for (const drug of drugs) {
-      try {
-        const success = await addDrug(
-          drug.name,
-          drug.quantity,
-          new Date(drug.expiryDate)
-        );
-
-        if (success) {
-          successCount++;
-        } else {
-          failureCount++;
-        }
-      } catch (error) {
-        console.error(`Failed to add drug: ${drug.name}`, error);
-        failureCount++;
-      }
-    }
-
+    const success = await importDrugsBatch(
+      rows.map(({ name, batchNumber, registrationNumber, quantity, expiryDate }) => ({
+        name,
+        batchNumber,
+        registrationNumber,
+        quantity,
+        expiryDate,
+      })),
+    );
     setCSVImporting(false);
 
-    if (failureCount === 0) {
+    if (success) {
       toast({
         title: 'Success',
-        description: `Successfully imported ${successCount} drug${successCount !== 1 ? 's' : ''} from CSV`,
+        description: `Imported ${rows.length} drug${rows.length !== 1 ? 's' : ''} from CSV`,
       });
-    } else {
-      toast({
-        title: 'Partial Import',
-        description: `${successCount} succeeded, ${failureCount} failed`,
-        variant: failureCount > successCount ? 'destructive' : 'default',
-      });
+      setActiveTab('drugs');
     }
-
-    setActiveTab('drugs');
+    return success;
   };
 
   const stats = [
@@ -132,6 +130,12 @@ const AdminDashboard = () => {
       <Header />
 
       <main className="container mx-auto px-4 py-8">
+        {error && (
+          <div role="alert" className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
         {/* Stats */}
         <StaggerContainer className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           {stats.map((stat, index) => (
@@ -177,6 +181,13 @@ const AdminDashboard = () => {
             >
               <BarChart className="h-4 w-4 mr-2" />
               Analytics
+            </Button>
+            <Button
+              variant={activeTab === 'staff' ? 'default' : 'secondary'}
+              onClick={() => setActiveTab('staff')}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Staff
             </Button>
           </div>
 
@@ -226,7 +237,7 @@ const AdminDashboard = () => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                 >
-                  <DrugCard drug={drug} />
+                  <DrugCard drug={drug} footer={<StockActions drug={drug} />} />
                 </motion.div>
               ))}
               {filteredDrugs.length === 0 && (
@@ -255,6 +266,16 @@ const AdminDashboard = () => {
                   <p className="text-muted-foreground">No transactions yet</p>
                 </div>
               )}
+            </motion.div>
+          )}
+          {activeTab === 'staff' && (
+            <motion.div
+              key="staff"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <StaffManagement />
             </motion.div>
           )}
           {activeTab === 'analytics' && (
@@ -308,6 +329,29 @@ const AdminDashboard = () => {
                     value={newDrug.name}
                     onChange={(e) => setNewDrug({ ...newDrug, name: e.target.value })}
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="batchNumber">Batch number</Label>
+                    <Input
+                      id="batchNumber"
+                      placeholder="e.g., BN-001"
+                      maxLength={64}
+                      value={newDrug.batchNumber}
+                      onChange={(e) => setNewDrug({ ...newDrug, batchNumber: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="registrationNumber">Reg. no. (optional)</Label>
+                    <Input
+                      id="registrationNumber"
+                      placeholder="e.g., NAFDAC 04-1234"
+                      maxLength={64}
+                      value={newDrug.registrationNumber}
+                      onChange={(e) => setNewDrug({ ...newDrug, registrationNumber: e.target.value })}
+                    />
+                  </div>
                 </div>
 
                 <div>
