@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local env / build output
+.env
+.env.local
+cache
+artifacts
