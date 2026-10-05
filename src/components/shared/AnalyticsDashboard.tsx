@@ -135,12 +135,12 @@ const KPICard: React.FC<{
   subtext?: string;
 }> = ({ label, value, icon, accent, delay, delta, subtext }) => {
   const accentMap: Record<string, string> = {
-    blue: 'from-blue-500/20 to-blue-600/5 border-blue-500/30 text-blue-500',
-    emerald: 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/30 text-emerald-500',
-    amber: 'from-amber-500/20 to-amber-600/5 border-amber-500/30 text-amber-500',
-    rose: 'from-rose-500/20 to-rose-600/5 border-rose-500/30 text-rose-500',
-    violet: 'from-violet-500/20 to-violet-600/5 border-violet-500/30 text-violet-500',
-    cyan: 'from-cyan-500/20 to-cyan-600/5 border-cyan-500/30 text-cyan-500',
+    blue: 'bg-blue-500/10 border-blue-600/30 text-blue-700',
+    emerald: 'bg-emerald-500/10 border-emerald-600/30 text-emerald-700',
+    amber: 'bg-amber-500/10 border-amber-600/30 text-amber-700',
+    rose: 'bg-rose-500/10 border-rose-600/30 text-rose-700',
+    violet: 'bg-violet-500/10 border-violet-600/30 text-violet-700',
+    cyan: 'bg-cyan-500/10 border-cyan-600/30 text-cyan-700',
   };
   const cls = accentMap[accent] || accentMap.blue;
 
@@ -150,7 +150,7 @@ const KPICard: React.FC<{
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, type: 'spring', stiffness: 120, damping: 14 }}
       whileHover={{ y: -3, transition: { duration: 0.2 } }}
-      className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${cls} p-5 backdrop-blur-sm`}
+      className={`relative overflow-hidden rounded-md border ${cls} p-5`}
     >
       {/* background glow blob */}
       <div className={`absolute -top-6 -right-6 h-24 w-24 rounded-full bg-current opacity-10 blur-2xl`} />
@@ -196,10 +196,10 @@ const HBar: React.FC<{ label: string; value: number; max: number; rank: number; 
 }) => {
   const pct = max > 0 ? (value / max) * 100 : 0;
   const colorMap: Record<string, string> = {
-    blue: 'from-blue-500 to-blue-400',
-    emerald: 'from-emerald-500 to-emerald-400',
-    violet: 'from-violet-500 to-violet-400',
-    amber: 'from-amber-500 to-amber-400',
+    blue: 'bg-blue-600',
+    emerald: 'bg-emerald-600',
+    violet: 'bg-violet-600',
+    amber: 'bg-amber-600',
   };
   const grad = colorMap[color] || colorMap.blue;
   return (
@@ -224,7 +224,7 @@ const HBar: React.FC<{ label: string; value: number; max: number; rank: number; 
             initial={{ width: 0 }}
             animate={{ width: `${pct}%` }}
             transition={{ delay: rank * 0.06 + 0.25, duration: 0.7, ease: 'easeOut' }}
-            className={`h-full rounded-full bg-gradient-to-r ${grad}`}
+            className={`h-full rounded-sm ${grad}`}
           />
         </div>
       </div>

@@ -27,7 +27,7 @@ export const Header = () => {
     >
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-bg">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary">
             <Shield className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>

@@ -74,7 +74,8 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Hanken Grotesk', 'system-ui', 'sans-serif'],
+        display: ['Bricolage Grotesque', 'Hanken Grotesk', 'sans-serif'],
       },
       keyframes: {
         "accordion-down": {

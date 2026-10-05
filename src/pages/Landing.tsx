@@ -69,36 +69,31 @@ const Landing = () => {
 
         {/* Background Pattern */}
         <div className="absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-primary/10 rounded-full blur-3xl opacity-30" />
         </div>
 
         <div className="container mx-auto px-4 py-20 lg:py-32">
-          <div className="max-w-4xl mx-auto text-center">
+          <div className="max-w-3xl">
             <StaggerContainer delay={0.2}>
               <StaggerItem>
                 <motion.div
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 0.5 }}
-                  className="inline-flex items-center justify-center w-20 h-20 rounded-2xl gradient-bg shadow-lg mb-8"
+                  className="inline-flex items-center justify-center w-14 h-14 rounded-md bg-primary mb-8"
                 >
-                  <Shield className="w-10 h-10 text-primary-foreground" />
+                  <Shield className="w-7 h-7 text-primary-foreground" />
                 </motion.div>
               </StaggerItem>
 
               <StaggerItem>
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6">
-                  <span className="gradient-text">MediChain</span>
-                  <br />
-                  <span className="text-foreground/80">Drug Inventory System</span>
+                <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 text-balance">
+                  Every pack, counted and signed on-chain
                 </h1>
               </StaggerItem>
 
               <StaggerItem>
-                <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-                  A blockchain-based solution for tamper-proof drug inventory tracking 
-                  and accountability in hospital pharmacy management.
+                <p className="text-lg text-muted-foreground max-w-xl mb-10">
+                  A stock register for hospital pharmacies where every receipt, dispensing and write-off is recorded against a named staff wallet and cannot be quietly edited later.
                 </p>
               </StaggerItem>
 
