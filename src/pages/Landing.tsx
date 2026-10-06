@@ -6,11 +6,13 @@ import { useBlockchain } from '@/hooks/useBlockchain';
 import { PageTransition, StaggerContainer, StaggerItem } from '@/components/layout/PageTransition';
 import { useNavigate } from 'react-router-dom';
 import { Waves } from '@/components/ui/waves-background';
+import { useTheme } from 'next-themes';
 
 const Landing = () => {
   const { connectWallet, isLoading, isRoleLoading, isConnected, role, error, account, isPendingAdmin, acceptAdmin } = useBlockchain();
   const [showRoleSelect, setShowRoleSelect] = useState(false);
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
 
   // Show role selection after wallet is connected
   useEffect(() => {
@@ -48,11 +50,11 @@ const Landing = () => {
   return (
     <PageTransition className="min-h-screen bg-background">
       {/* Hero Section */}
-      <div className="relative overflow-hidden">
+      <div className="relative isolate overflow-hidden">
         {/* Wave Background */}
-        <div className="absolute inset-0 -z-20 h-[600px] overflow-hidden">
+        <div className="absolute inset-0 -z-20 overflow-hidden">
           <Waves
-            lineColor="rgba(255, 255, 255, 0.1)"
+            lineColor={resolvedTheme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(20, 40, 30, 0.12)'}
             backgroundColor="transparent"
             waveSpeedX={0.02}
             waveSpeedY={0.01}

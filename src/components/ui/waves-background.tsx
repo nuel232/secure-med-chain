@@ -239,8 +239,11 @@ export function Waves({
       };
       requestAnimationFrame(tick);
       window.addEventListener("resize", onResize);
+      const ro = new ResizeObserver(onResize);
+      ro.observe(container);
       return () => {
         window.removeEventListener("resize", onResize);
+        ro.disconnect();
       };
     } else {
       const canvas = canvasRef.current;
@@ -348,10 +351,13 @@ export function Waves({
       };
       requestAnimationFrame(tick);
       window.addEventListener("resize", onResize);
+      const ro = new ResizeObserver(onResize);
+      ro.observe(container);
       window.addEventListener("mousemove", onMouseMove);
       window.addEventListener("touchmove", onTouchMove, { passive: false });
       return () => {
         window.removeEventListener("resize", onResize);
+        ro.disconnect();
         window.removeEventListener("mousemove", onMouseMove);
         window.removeEventListener("touchmove", onTouchMove);
       };
